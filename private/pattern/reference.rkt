@@ -166,3 +166,11 @@
    (define R (denote (p:and-right p)))
    (for*/list ([m1 (in-list L)] [m2 (in-list R)] #:when (disjoint? m1 m2))
      (pmatch-union ctx m1 m2))))
+
+;; ===========================================================================
+;; PT.disjunction: ⟦P₁ ∨ P₂⟧ = ⟦P₁⟧ ∪ ⟦P₂⟧; the bindings of the side that did
+;; not match are absent.
+
+(register!
+ p:or?
+ (λ (ctx p denote) (append (denote (p:or-left p)) (denote (p:or-right p)))))

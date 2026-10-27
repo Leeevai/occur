@@ -50,3 +50,8 @@
   (define both (denote (conj A (prim 'A #:bind 'x)) H))
   (check-equal? (ids both) '(("a1" "a2") ("a1" "a2")))
   (check-equal? (sort (map (λ (m) (event-id (hash-ref (pmatch-bindings m) 'a))) both) string<?) '("a1" "a2")))
+
+(spec-test 'PT.disjunction "⟦P₁ ∨ P₂⟧ is the union; the other side's bindings are absent"
+  (define ms (denote (disj A C) H))
+  (check-equal? (ids ms) '(("a1") ("a2") ("c1")))
+  (check-false (hash-has-key? (pmatch-bindings (last ms)) 'a)))
