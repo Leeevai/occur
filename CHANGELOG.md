@@ -107,8 +107,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   scripts, and a merge keyed by entity. A module that declares nothing to
   run is a library and exports only what it provides.
 
+- Examples and documentation (M18): `examples/fraud.rkt`,
+  `examples/iot-telemetry.rkt`, `examples/logistics.rkt`, and
+  `examples/history.rkt`, each with a test, so that every spec ID has an
+  example; `run-result-history` for a stream's history at a time; grid
+  windows that forget a retracted event before they fire; a Runtime
+  Reference chapter and a manual that builds without warnings; the README
+  with a quick start, the algebra in LaTeX, and many examples; every one of
+  the 175 coverage rows done, and the strict coverage check on.
+
 ### Fixed
 
+- A side stream declared by a stage that is not its stream's last is kept.
+- An operator still holding a retracted event, such as a delay or an open
+  window, never emits it or anything derived from it.
+- Retracting an event also retracts what a node already derived from it
+  when the node's operator handles retractions itself, such as a
+  stream-table join.
+- An outer join's unmatched rows go through its `#:select`.
+- A trailing absence with its own bound no longer draws the unbounded
+  pattern warning.
 - A rule's max_delay clock restarts after a consuming output, instead of
   flushing a later contribution at once.
 - A cold start holds a rules node's outputs at the node, so stages after it
