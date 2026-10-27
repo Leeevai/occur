@@ -136,36 +136,36 @@ Status values: `todo`, `partial`, `done`.
 | `PT.spatial.distance` | §11 | `within-distance?` `min-distance` ... in `#:where` | `within-distance?` `beyond-distance?` `min/max/avg-distance` | tests/families-test.rkt |  | partial |
 | `PT.spatial.moving` | §11 | `moving-toward?` `moving-away?` `constant-direction?` | (private/pattern/families.rkt) | tests/families-test.rkt |  | partial |
 | `PT.accumulate` | §11 | `accumulate-pattern`; Reflex `accumulate` (M17) | `accumulate-pattern` (private/pattern/families.rkt) | tests/families-test.rkt |  | partial |
-| `PT.flush` | §11 | | | | | todo |
+| `PT.flush` | §11 | `#:timeout-partial (d processing-time)` with `#:retain (timeout)` | `policy-partials` (private/pattern/policies.rkt) | tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
 | `PT.silence` | §11 | `silence-pattern`; Reflex `silence` (M17) | `silence-pattern` | tests/families-test.rkt |  | partial |
 | `PT.recovery` | §11 | `recovery-pattern` | `recovery-pattern` | tests/families-test.rkt |  | partial |
 | `PT.window-close` | §11 | Reflex `window` (M17) | `window-close-operator` (private/pattern/families.rkt) | tests/families-test.rkt |  | partial |
 | `PT.schedule` | §11 | `(window (calendar "cron"))`, `define-schedule` | `calendar-window-operator` (private/window.rkt) | tests/families-test.rkt |  | partial |
-| `SEL.next` | §12 | | | | | todo |
-| `SEL.strict` | §12 | | | | | todo |
-| `SEL.partition` | §12 | | | | | todo |
-| `SEL.any` | §12 | `#:selection any` (default) | the engine's delta joins (private/pattern/nfa.rkt) | tests/nfa-test.rkt, tests/pattern-operator-test.rkt |  | partial |
-| `CON.cumulative` | §12 | | | | | todo |
-| `CON.retain` | §12 | | | | | todo |
-| `CON.recent` | §12 | | | | | todo |
-| `CON.unrestricted` | §12 | `#:consumption unrestricted` (default) | the engine reports every match (private/pattern/nfa.rkt) | tests/nfa-test.rkt |  | partial |
-| `CON.chronicle` | §12 | | | | | todo |
-| `CON.continuous` | §12 | | | | | todo |
-| `OUT.rate-limit` | §12 | | | | | todo |
-| `OUT.coalesce` | §12 | | | | | todo |
-| `OUT.first` | §12 | | | | | todo |
-| `OUT.timeout-partial` | §12 | | | | | todo |
-| `OUT.edge` | §12 | | | | | todo |
-| `OUT.every` | §12 | `#:output every` (default) | the engine reports every match (private/pattern/nfa.rkt) | tests/nfa-test.rkt |  | partial |
-| `OUT.last` | §12 | | | | | todo |
-| `OUT.maximal` | §12 | | | | | todo |
-| `SKIP.no-skip` | §12 | | | | | todo |
-| `SKIP.to-next` | §12 | | | | | todo |
-| `SKIP.past-last` | §12 | | | | | todo |
-| `SKIP.to-first` | §12 | | | | | todo |
-| `SKIP.to-last` | §12 | | | | | todo |
-| `EVAL.immediate` | §12 | | | | | todo |
-| `EVAL.deferred` | §12 | default for non-monotone patterns; `#:eval deferred` | deferred decisions at the watermark in the engine (private/pattern/nfa.rkt) | tests/nfa-test.rkt |  | partial |
+| `SEL.next` | §12 | `#:selection next` / `skip-till-next-match` | `strategy-check` (private/pattern/policies.rkt) | tests/selection-test.rkt, tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
+| `SEL.strict` | §12 | `#:selection strict` | `strategy-check` registered with the engine; `select-matches` (private/pattern/policies.rkt) | tests/selection-test.rkt, tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
+| `SEL.partition` | §12 | `#:selection partition` | `strategy-check` (private/pattern/policies.rkt) | tests/selection-test.rkt, tests/lang-test.rkt |  | partial |
+| `SEL.any` | §12 | `#:selection any` (default) | engine delta joins (private/pattern/nfa.rkt) | tests/nfa-test.rkt, tests/selection-test.rkt |  | partial |
+| `CON.cumulative` | §12 | `#:consumption cumulative` | policy layer | tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
+| `CON.retain` | §12 | `#:retain (timeout)` | `make-match-policy #:retain` | tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
+| `CON.recent` | §12 | `#:consumption recent` | policy layer, `initial-leaves` | tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
+| `CON.unrestricted` | §12 | `#:consumption unrestricted` (default) | policy layer (private/pattern/policies.rkt) | tests/policies-test.rkt, tests/nfa-test.rkt |  | partial |
+| `CON.chronicle` | §12 | `#:consumption chronicle` | policy layer | tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
+| `CON.continuous` | §12 | `#:consumption continuous` | policy layer | tests/policies-test.rkt |  | partial |
+| `OUT.rate-limit` | §12 | `(rate-limit d #:mode drop/defer)` stage | `rate-limit-operator` (private/ops/output.rkt) | tests/output-test.rkt, tests/lang-test.rkt |  | partial |
+| `OUT.coalesce` | §12 | `(coalesce #:sum (a ...))` stage; schedules and calendar windows coalesce ticks | `coalesce-operator` `coalesce-events` (private/ops/output.rkt) | tests/output-test.rkt, tests/progress-test.rkt, tests/families-test.rkt |  | partial |
+| `OUT.first` | §12 | `#:output first` | policy layer | tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
+| `OUT.timeout-partial` | §12 | `#:timeout-partial (d clock)` | `policy-partials` (private/pattern/policies.rkt) | tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
+| `OUT.edge` | §12 | `(edge #:enter e #:leave e)` stage | `edge-operator` (private/ops/output.rkt) | tests/output-test.rkt, tests/lang-test.rkt |  | partial |
+| `OUT.every` | §12 | `#:output every` (default) | policy layer | tests/policies-test.rkt, tests/nfa-test.rkt |  | partial |
+| `OUT.last` | §12 | `#:output last` | policy layer | tests/policies-test.rkt |  | partial |
+| `OUT.maximal` | §12 | `#:output maximal` | policy layer | tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
+| `SKIP.no-skip` | §12 | `#:skip no-skip` (default) | `skip-range` (private/pattern/policies.rkt) | tests/policies-test.rkt |  | partial |
+| `SKIP.to-next` | §12 | `#:skip to-next` | `skip-range` | tests/policies-test.rkt |  | partial |
+| `SKIP.past-last` | §12 | `#:skip past-last` | `skip-range` | tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
+| `SKIP.to-first` | §12 | `#:skip (to-first x)` | `skip-range` | tests/policies-test.rkt |  | partial |
+| `SKIP.to-last` | §12 | `#:skip (to-last x)` | `skip-range` | tests/policies-test.rkt |  | partial |
+| `EVAL.immediate` | §12 | `#:eval immediate` (compile-time check: monotone only) | policy layer | tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
+| `EVAL.deferred` | §12 | `#:eval deferred`; forced by last/maximal | engine deferred nodes, policy releases | tests/nfa-test.rkt, tests/policies-test.rkt |  | partial |
 | `DR.summary` | §13 | | | | | todo |
 | `DR.view` | §13 | | | | | todo |
 | `DR.output-identity` | §13 | | | | | todo |
