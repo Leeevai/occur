@@ -99,3 +99,14 @@
   [event->string (-> event? string?)]
   [item->string (-> any/c string?)]
   [value->string (-> any/c string?)]))
+
+;; Validate an event built by a surface constructor against its type.
+(define (checked-event t e where)
+  (cond [(payload-problem t (event-payload e))
+         => (λ (p) (raise-arguments-error (event-type-name t)
+                                          (format "~a: payload not in D_~a: ~a" where (event-type-name t) p)))]
+        [else e]))
+
+(provide
+ (contract-out
+  [checked-event (-> event-type? event? string? event?)]))

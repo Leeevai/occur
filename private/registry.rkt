@@ -76,3 +76,15 @@
   [registry-steps (-> registry? list?)]
   [run-registry (-> registry? run-result?)]
   [print-run-result (->* (run-result?) (output-port?) void?)]))
+
+;; Resolve a data path relative to the directory of the declaring module.
+(define (module-relative-path module-source rel)
+  (cond [(absolute-path? rel) rel]
+        [(path? module-source)
+         (define-values (dir _name _must-be-dir?) (split-path module-source))
+         (build-path dir rel)]
+        [else rel]))
+
+(provide
+ (contract-out
+  [module-relative-path (-> any/c path-string? path-string?)]))
