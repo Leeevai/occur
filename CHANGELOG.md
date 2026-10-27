@@ -54,3 +54,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Allen relations (M9): the 13 interval relations, point/point and
   point/interval relations, `allen-relation` and a predicate per relation,
   over intervals and events.
+- Pattern algebra (M10): the pattern AST of §11.2 with ACT; the reference
+  oracle transcribing §11.3 operator by operator; the derived families of
+  §11.4 (threshold, trends, relative extremes, spatial distance and
+  movement, accumulate, silence, recovery, window close, schedule);
+  `define-pattern` with compile-time checks for bindings, Kleene misuse,
+  and policy names, and a warning for unbounded patterns; the enforced
+  coverage test.
