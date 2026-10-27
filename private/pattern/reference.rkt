@@ -194,3 +194,19 @@
                #:unless (for/or ([q (in-list Q)])
                           (and (< (pmatch-te m1) (pmatch-ts q)) (< (pmatch-te q) (pmatch-ts m2)))))
      (pmatch-union ctx m1 m2 #:pred (pred-of ctx m1)))))
+
+;; ===========================================================================
+;; PT.absence (absence / timeout):
+;;   ⟦P ; ¬Q within Δ⟧ = { m ∈ ⟦P⟧ : no q ∈ ⟦Q⟧ with te(m) < ts(q) <= te(m) + Δ }
+;; The detection ends at its deadline te(m) + Δ, not at its last
+;; constituent. P may be ACT.
+
+(register!
+ p:absence?
+ (λ (ctx p denote)
+   (define Q (denote (p:absence-neg p)))
+   (define Δ (p:absence-window p))
+   (for/list ([m (in-list (denote (p:absence-body p)))]
+              #:unless (for/or ([q (in-list Q)])
+                         (and (< (pmatch-te m) (pmatch-ts q)) (<= (pmatch-ts q) (+ (pmatch-te m) Δ)))))
+     (struct-copy pmatch m [te (+ (pmatch-te m) Δ)]))))

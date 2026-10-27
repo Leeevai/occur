@@ -63,3 +63,15 @@
   ;; a Q at the gap's boundary does not block (the gap is open)
   (check-equal? (ids (denote (neg-between A V B) (list (ev "a" 'A 1) (ev "v" 'V 1) (ev "b" 'B 2))))
                 '(("a" "b"))))
+
+(spec-test 'PT.absence "⟦P ; ¬Q within Δ⟧ keeps the matches not followed by Q within Δ, ending at the deadline"
+  (define X (prim 'X #:bind 'x))
+  (define Hx (list (ev "x1" 'X 0) (ev "x2" 'X 5) (ev "x3" 'X 20)))
+  (define ms (denote (absence X (prim 'X) 10) Hx))
+  (check-equal? (ids ms) '(("x2") ("x3")))
+  (check-equal? (map (λ (m) (list (pmatch-ts m) (pmatch-te m))) ms) '((5 15) (20 30)))
+  ;; the window is closed on the right: Q exactly at te + Δ blocks
+  (check-equal? (ids (denote (absence X (prim 'X) 5) (list (ev "x1" 'X 0) (ev "x2" 'X 5)))) '(("x2")))
+  ;; P may be ACT: total silence since activation
+  (check-equal? (map (λ (m) (pmatch-te m)) (denote (absence act (prim 'X) 600) '() #:activation 0)) '(600))
+  (check-equal? (denote (absence act (prim 'X) 600) (list (ev "x" 'X 100)) #:activation 0) '()))
