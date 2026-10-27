@@ -1,0 +1,3 @@
+Every spec ID in docs/coverage.md is done. This file turns on the strict
+coverage check in tests/coverage.rkt: every row done, tested, with an
+example, and each Tests cell naming exactly the files tagged with its ID.
