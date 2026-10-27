@@ -92,3 +92,36 @@
          (list (event-id s) (event-id r))))
      (check-equal? (norm (pairs (join-run (window-join-operator (tumbling 10) always #:key key) steps)))
                    (norm expected-window)))))
+
+(define (rate id t k r) (make-event 'Rate `((k . ,k) (rate . ,r)) #:id id #:at t))
+
+(spec-test 'JN.table "each s is matched against the table's current row for its key"
+  (define op (table-join-operator #:key key))
+  (define res (join-run op (list (arrive 1 's (order "o0" 1 "a" 5))          ; no row yet
+                                 (arrive 2 'r (rate "r1" 2 "a" 10))
+                                 (arrive 3 's (order "o1" 3 "a" 5))
+                                 (arrive 4 'r (rate "r2" 4 "a" 20))          ; upsert
+                                 (arrive 5 's (order "o2" 5 "a" 5))
+                                 (arrive 6 's (order "o3" 6 "b" 5)))))
+  (check-equal? (pairs res) '(("o1" "r1") ("o2" "r2")))
+  (check-equal? (run-result-counter res 'j 'unmatched) 2)
+  (define outer (join-run (table-join-operator #:key key #:outer 'left #:right-attributes '(rate))
+                          (list (arrive 1 's (order "o0" 1 "a" 5)))))
+  (check-equal? (event-attr (car (run-result-events outer)) 'rate) #f))
+
+(spec-test 'JN.table "a retracted row is deleted from the table"
+  (define op (table-join-operator #:key key))
+  (define row (rate "r1" 2 "a" 10))
+  (define res (join-run op (list (arrive 2 'r row) (arrive 3 'r (retraction row)) (arrive 4 's (order "o1" 4 "a" 5)))))
+  (check-equal? (pairs res) '()))
+
+(spec-test 'JN.as-of "each s meets the version valid at t(s), even when it arrives late"
+  (define op (as-of-join-operator #:key key))
+  (define res (join-run op (list (arrive 1 'r (rate "v1" 0 "a" 1))
+                                 (arrive 2 's (order "o1" 15 "a" 5))
+                                 (arrive 3 'r (rate "v3" 20 "a" 3))
+                                 (arrive 4 'r (rate "v2" 10 "a" 2))         ; late version, still before o1
+                                 (arrive 5 's (order "o0" 5 "a" 5))
+                                 (arrive 6 's (order "o9" 25 "b" 5)))))
+  (check-equal? (pairs res) '(("o0" "v1") ("o1" "v2")))
+  (check-equal? (run-result-counter res 'j 'unmatched) 1))

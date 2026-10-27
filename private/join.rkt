@@ -151,3 +151,74 @@
                                (#:type symbol? #:combine (-> event? event? hash?) #:outer outer/c
                                 #:left-attributes (listof symbol?) #:right-attributes (listof symbol?))
                                operator?)]))
+
+;; ===========================================================================
+;; JN.table: a stream–table (lookup) join. Port 1 carries the table: each
+;; event upserts the row of its key (a retraction deletes it). Each s on
+;; port 0 is matched against the table's current state for its key. With
+;; #:outer 'left an s with no row passes with the table's attributes null;
+;; otherwise it is dropped and counted. Enriching outputs with an entity
+;; directory's labels is such a lookup.
+
+(define (table-join-operator #:key key #:type [type 'Joined] #:combine [combine default-combine]
+                             #:outer [outer #f] #:right-attributes [rattrs '()])
+  (make-operator
+   'table-join
+   #:arity 2
+   #:key key
+   #:init-key (λ (gl k c) 'no-row)
+   #:on-event
+   (λ (gl row e c)
+     (cond
+       [(= (ctx-port c) 1) e]                                    ; upsert
+       [(event? row) (emit! c (joined type combine e row)) row]
+       [(keeps-left? outer) (emit! c (unmatched type e rattrs 'left)) row]
+       [else (count! c 'unmatched) row]))
+   #:on-retract (λ (gl row e c) (if (and (event? row) (equal? (event-id row) (event-id e))) 'no-row row))))
+
+;; ===========================================================================
+;; JN.as-of: each s is matched with the version of r valid at t(s): for its
+;; key, the r with the greatest valid_from <= t(s) (valid_from is ts(r)
+;; unless #:valid-from says otherwise). A version may still arrive late, so
+;; s waits until the watermark (the minimum over both inputs) reaches t(s).
+
+(struct asof (versions pending) #:transparent)   ; versions: list sorted by valid-from; pending: s events
+
+(define (as-of-join-operator #:key key #:valid-from [valid-from event-ts] #:type [type 'Joined]
+                             #:combine [combine default-combine] #:outer [outer #f]
+                             #:right-attributes [rattrs '()])
+  (define (version-at versions t)
+    (for/last ([r (in-list versions)] #:when (<= (valid-from r) t)) r))
+  (make-operator
+   'as-of-join
+   #:arity 2
+   #:monotone? #f
+   #:key key
+   #:init-key (λ (gl k c) (asof '() '()))
+   #:on-event
+   (λ (gl st e c)
+     (if (= (ctx-port c) 1)
+         (asof (sort (cons e (asof-versions st)) < #:key valid-from) (asof-pending st))
+         (asof (asof-versions st) (append (asof-pending st) (list e)))))
+   #:event-deadline (λ (st) (and (pair? (asof-pending st)) (apply min (map event-ts (asof-pending st)))))
+   #:on-timer
+   (λ (gl st c)
+     (define W (ctx-watermark c))
+     (define-values (due later) (partition (λ (s) (<= (event-ts s) W)) (asof-pending st)))
+     (for ([s (in-list (sort due < #:key event-ts))])          ; released in event-time order
+       (define r (version-at (asof-versions st) (event-ts s)))
+       (cond [r (emit! c (joined type combine s r))]
+             [(keeps-left? outer) (emit! c (unmatched type s rattrs 'left))]
+             [else (count! c 'unmatched)]))
+     (asof (asof-versions st) later))))
+
+(provide
+ (contract-out
+  [table-join-operator (->* (#:key (-> event? any/c))
+                            (#:type symbol? #:combine (-> event? event? hash?) #:outer (or/c #f 'left)
+                             #:right-attributes (listof symbol?))
+                            operator?)]
+  [as-of-join-operator (->* (#:key (-> event? any/c))
+                            (#:valid-from (-> event? time?) #:type symbol? #:combine (-> event? event? hash?)
+                             #:outer (or/c #f 'left) #:right-attributes (listof symbol?))
+                            operator?)]))
