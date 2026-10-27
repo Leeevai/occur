@@ -4,6 +4,7 @@
 ;;
 ;; Run it with `racket examples/iot-telemetry.rkt`; tests/iot-test.rkt
 ;; checks it.
+(require racket/list)
 
 (event-type Reading [device : String] [sensor : String] [kind : String] [value : Real])
 (event-type Maintenance [device : String] [status : String])
@@ -74,3 +75,55 @@
 ;; CX.composite: per pump × per half hour
 (define-stream pump-half-hours (from readings)
   (context (and (segment device) (sliding-interval #:size (minutes 30) #:slide (minutes 30)))))
+
+;; ---------------------------------------------------------------------------
+;; Patterns (§11)
+
+(event-type Episode [device : String] [trend : String] #:derived)
+
+;; Trends (PT.trend.*) over runs of a pump's consecutive readings: at
+;; least four within half an hour, reported when no longer run contains them
+(define-pattern heating #:from readings #:key device #:within (minutes 30) #:selection partition #:output maximal
+  (kleene+ (t : Reading)) #:where (and (>= (count t) 4) (increasing t.value))         ; 20 → 34
+  #:emit (Episode [device (first t.device)] [trend "increasing"]))
+(define-pattern warming #:from readings #:key device #:within (minutes 30) #:selection partition #:output maximal
+  (kleene+ (t : Reading)) #:where (and (>= (count t) 4) (non-decreasing t.value))     ; and 34 again
+  #:emit (Episode [device (first t.device)] [trend "non-decreasing"]))
+(define-pattern cooling #:from readings #:key device #:within (minutes 30) #:selection partition #:output maximal
+  (kleene+ (t : Reading)) #:where (and (>= (count t) 4) (decreasing t.value))         ; 34 → 26
+  #:emit (Episode [device (first t.device)] [trend "decreasing"]))
+(define-pattern settling #:from readings #:key device #:within (minutes 30) #:selection partition #:output maximal
+  (kleene+ (t : Reading)) #:where (and (>= (count t) 4) (non-increasing t.value))     ; 34, 34, 33, …
+  #:emit (Episode [device (first t.device)] [trend "non-increasing"]))
+(define-pattern steady #:from readings #:key device #:within (minutes 30) #:selection partition #:output maximal
+  (kleene+ (t : Reading)) #:where (and (>= (count t) 4) (stable t.value 1/2))         ; within half a degree
+  #:emit (Episode [device (first t.device)] [trend "stable"]))
+(define-pattern swinging #:from readings #:key device #:within (minutes 15) #:selection partition #:output maximal
+  (kleene+ (t : Reading)) #:where (and (>= (count t) 4) (mixed t.value))              ; up and down
+  #:emit (Episode [device (first t.device)] [trend "mixed"]))
+
+;; PT.relative: a reading hotter than or as hot as the readings around it
+(define-pattern peak #:from readings #:key device #:within (minutes 20) #:selection partition
+  (seq (kleene+ (b : Reading)) (p : Reading) (kleene+ (a : Reading)))
+  #:where (and (= (count b) 2) (= (count a) 2) (relative-max? p.value (append b.value a.value)))
+  #:emit (Episode [device p.device] [trend "peak"]))
+
+;; PT.aperiodic, PT.aperiodic-cumulative: the readings taken during
+;; maintenance, one by one and all together
+(define-pattern maintenance-readings #:from telemetry #:key device
+  (aperiodic (s : Maintenance (equal? status "start")) (r : Reading) (e : Maintenance (equal? status "end"))))
+(define-pattern maintenance-log #:from telemetry #:key device
+  (aperiodic* (s : Maintenance (equal? status "start")) (r : Reading) (e : Maintenance (equal? status "end"))))
+
+;; PT.periodic, PT.periodic-cumulative: a reminder every five minutes while
+;; the door is open, and all of them when it closes
+(define-pattern door-reminders #:from telemetry #:key device
+  (periodic (o : Door (equal? state "open")) (minutes 5) (Door (equal? state "closed"))))
+(define-pattern door-report #:from telemetry #:key device
+  (periodic* (o : Door (equal? state "open")) (minutes 5) (c : Door (equal? state "closed"))))
+
+;; TM.clock: a pump that has sent nothing for twenty minutes, by the hybrid
+;; clock (its newest reading's time against the processing clock)
+(define-pattern silent #:from readings #:key device #:clock hybrid
+  (seq (r : Reading) (absent Reading #:within (minutes 20))))
+
