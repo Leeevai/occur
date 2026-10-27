@@ -91,3 +91,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   processing-time timers suspended, holds outputs back until the first
   rules push, coalesces them per operator instance, and judges them against
   the instances then in force; a rule source's name is bound to its items.
+- Card-testing acceptance (M16): `examples/card-testing.rkt` with traces A,
+  A′, and B of §15 as acceptance tests, on the incremental engine and the
+  reference oracle; the reference engine applies the selection strategies
+  with every or maximal output; an examples chapter in the manual.
+
+### Fixed
+
+- Last and maximal output of a pattern without a top-level bound, and an
+  event-less match under maximal output, are held until the end of the
+  stream instead of being reported before an extension could arrive;
+  `define-pattern` warns about such patterns.
