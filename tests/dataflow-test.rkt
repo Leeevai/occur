@@ -276,3 +276,12 @@
   (define items (map output-item (run-result-outputs r)))
   (check-equal? (map (λ (x) (if (retraction? x) (list '⊖ (event-ts (retraction-event x))) (event-ts x))) items)
                 '(0 (⊖ 0) 10)))
+
+(spec-test 'ES.history "the history of a node's stream at t: what it emitted, not retracted, by end time t"
+  (define s (make-source 'in))
+  (define n (make-node 'n (stateless-operator 'pass (λ (e c) (emit! c e))) (list s) #:sink? #t))
+  (define r (run (make-program (list n))
+                 (list (arrive 1 'in (ev "a" 1)) (arrive 2 'in (ev "b" 5)) (arrive 3 'in (ev "c" 9))
+                       (arrive 4 'in (retraction (ev "b" 5))))))
+  (check-equal? (map event-id (run-result-history r 'n 9)) '("a" "c"))
+  (check-equal? (map event-id (run-result-history r 'n 4)) '("a")))

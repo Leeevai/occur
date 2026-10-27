@@ -12,7 +12,8 @@
          "time.rkt"
          "event.rkt"
          "operator.rkt"
-         "scheduler.rkt")
+         "scheduler.rkt"
+         (only-in "stream.rkt" make-event-stream history))
 
 ;; ===========================================================================
 ;; Sources and nodes
@@ -207,6 +208,16 @@
              #:when (event? (output-item o))
              #:when (or (not node) (eq? node (output-node o))))
     (output-item o)))
+
+;; ES.history: the history H_S(t) of the stream a node emitted, the events
+;; it emitted and did not retract whose end time is at most t.
+(define (run-result-history r node t)
+  (define retracted
+    (for/hash ([o (in-list (run-result-outputs r))]
+               #:when (and (eq? node (output-node o)) (retraction? (output-item o))))
+      (values (event-id (retraction-event (output-item o))) #t)))
+  (define events (filter (λ (e) (not (hash-ref retracted (event-id e) #f))) (run-result-events r node)))
+  (history (make-event-stream (remove-duplicates (map event-type events)) events) t))
 
 (define (run-result-counter r node name)
   (hash-ref (hash-ref (run-result-counters r) node (hash)) name 0))
@@ -750,6 +761,7 @@
                       [watermarks hash?] [states hash?])]
   [run-result-events (->* (run-result?) ((or/c #f symbol?)) (listof event?))]
   [run-result-counter (-> run-result? symbol? symbol? exact-integer?)]
+  [run-result-history (-> run-result? symbol? time? (listof event?))]
   [run (->* (program? list?)
             (#:clock simulated-clock? #:final-watermark? boolean? #:delivery (or/c 'by-key 'emission)
              #:track-provenance? boolean?)
