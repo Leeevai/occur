@@ -114,3 +114,20 @@
   (check-equal? (states 'sensor-health "d1-load") '((60 . live) (120 . late) (180 . quiet) (240 . quiet) (300 . quiet) (360 . silent)))
   ;; a sensor is known once it reports
   (check-equal? (map car (states 'sensor-health "d1-position")) '(120 180 240 300 360)))
+
+(require (prefix-in recovery: "../examples/reflex/recovery.rkt"))
+
+(spec-test '(TM.checkpoint TM.replay OUT.coalesce DR.output-identity)
+           "recovery: a restart repeats triggers with their identity; a cold start releases one per instance after the rules push"
+  (define r (recovery:occur-run))
+  (define rows (for/list ([t (triggers r)]) (take t 5)))
+  (check-equal? rows '((20 samples (10 20) 2 1)
+                       (40 samples (30 40) 2 1)
+                       (40 samples (30 40) 2 1)      ; re-read after the restore
+                       (150 silence (50 150) 5 1)
+                       ;; the cold start: both pair triggers, coalesced, released at the push
+                       (200 samples (10 40) 4 2)))
+  ;; the repeat has the same identity, so downstream deduplication drops it
+  (check-equal? (length (dedupe-outputs (filter (λ (o) (eq? (output-node o) 'triggers)) (run-result-outputs r)))) 4)
+  ;; quiet's trigger, rebuilt by the replay, is dropped: its rule is gone
+  (check-equal? (for/sum ([c (in-hash-values (run-result-counters r))]) (hash-ref c 'dropped-after-replay 0)) 1))
