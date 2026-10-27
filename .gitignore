@@ -1,0 +1,24 @@
+# Racket build output
+compiled/
+doc/
+*.zo
+*.dep
+
+# Scribble build output
+scribblings/*.html
+scribblings/*.css
+scribblings/*.js
+
+# Editor files
+*~
+\#*\#
+.\#*
+*.swp
+*.swo
+.vscode/
+.idea/
+*.bak
+
+# OS files
+.DS_Store
+Thumbs.db
