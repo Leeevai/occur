@@ -24,20 +24,15 @@ This file is the resume point for work on occur. Read it, together with
 | M15 | Checkpoint, restore, and replay | §6 | done |
 | M16 | Acceptance: card testing | §15 | done |
 | M17 | Acceptance: Reflex | §16 | done |
-| M18 | Examples, Scribble docs, README, full coverage | all | todo |
+| M18 | Examples, Scribble docs, README, full coverage | all | done |
 | M19 | Release v0.1.0 | all | todo |
 
 ## Next step
 
-M18: examples for fraud (beyond §15), IoT telemetry, and logistics
-geofencing, chosen so that every spec ID still `partial` in
-`docs/coverage.md` gets an example; complete Scribble docs (unique tags
-for the per-chapter Runtime sections, no broken cross references); the
-full README (quick start with `raco pkg install`, an annotated example,
-the algebra with LaTeX, many examples, links to `docs/spec.md`,
-`docs/coverage.md`, `docs/reflex.md`, and the manual); then every row
-`done` and `docs/.coverage-complete`, which turns on the strict coverage
-check.
+M19: the release. Set the version to 0.1 in `info.rkt`, move the
+CHANGELOG's Unreleased entries under 0.1.0, create the annotated tag
+`v0.1.0`, and publish the GitHub release with notes taken from the
+CHANGELOG.
 
 Notes:
 - Hosted CI runs on every push (GitHub Actions, `.github/workflows/ci.yml`)
@@ -50,230 +45,231 @@ Notes:
 ## Spec IDs
 
 Each ID is checked once it is implemented, exposed in the surface language,
-tested with a `spec-test`, and documented in `docs/coverage.md`.
+tested with a `spec-test`, and documented in `docs/coverage.md`. All 175
+are; `docs/.coverage-complete` keeps the strict coverage check on.
 
 ### ES (§2)
 
-- [ ] `ES.time`
-- [ ] `ES.type`
-- [ ] `ES.event`
-- [ ] `ES.batch`
-- [ ] `ES.reference`
-- [ ] `ES.composite`
-- [ ] `ES.space`
-- [ ] `ES.precedes`
-- [ ] `ES.membership`
-- [ ] `ES.causality`
-- [ ] `ES.stream`
-- [ ] `ES.history`
-- [ ] `ES.keyed`
-- [ ] `ES.substream`
-- [ ] `ES.operator`
+- [x] `ES.time`
+- [x] `ES.type`
+- [x] `ES.event`
+- [x] `ES.batch`
+- [x] `ES.reference`
+- [x] `ES.composite`
+- [x] `ES.space`
+- [x] `ES.precedes`
+- [x] `ES.membership`
+- [x] `ES.causality`
+- [x] `ES.stream`
+- [x] `ES.history`
+- [x] `ES.keyed`
+- [x] `ES.substream`
+- [x] `ES.operator`
 
 ### OP (§4)
 
-- [ ] `OP.filter`
-- [ ] `OP.project`
-- [ ] `OP.map`
-- [ ] `OP.enrich`
-- [ ] `OP.split`
-- [ ] `OP.route`
+- [x] `OP.filter`
+- [x] `OP.project`
+- [x] `OP.map`
+- [x] `OP.enrich`
+- [x] `OP.split`
+- [x] `OP.route`
 
 ### ST (§5)
 
-- [ ] `ST.monotonic-merge`
-- [ ] `ST.merge`
-- [ ] `ST.key-by`
-- [ ] `ST.dedupe`
-- [ ] `ST.reorder`
-- [ ] `ST.throttle`
+- [x] `ST.monotonic-merge`
+- [x] `ST.merge`
+- [x] `ST.key-by`
+- [x] `ST.dedupe`
+- [x] `ST.reorder`
+- [x] `ST.throttle`
 
 ### TM (§6)
 
-- [ ] `TM.clock`
-- [ ] `TM.lateness`
-- [ ] `TM.keyed-watermark`
-- [ ] `TM.event-time`
-- [ ] `TM.processing-time`
-- [ ] `TM.watermark`
-- [ ] `TM.idle`
-- [ ] `TM.skew-guard`
-- [ ] `TM.timer`
-- [ ] `TM.schedule`
-- [ ] `TM.retraction`
-- [ ] `TM.checkpoint`
-- [ ] `TM.replay`
+- [x] `TM.clock`
+- [x] `TM.lateness`
+- [x] `TM.keyed-watermark`
+- [x] `TM.event-time`
+- [x] `TM.processing-time`
+- [x] `TM.watermark`
+- [x] `TM.idle`
+- [x] `TM.skew-guard`
+- [x] `TM.timer`
+- [x] `TM.schedule`
+- [x] `TM.retraction`
+- [x] `TM.checkpoint`
+- [x] `TM.replay`
 
 ### WN (§7)
 
-- [ ] `WN.tumbling`
-- [ ] `WN.sliding`
-- [ ] `WN.session`
-- [ ] `WN.count`
-- [ ] `WN.landmark`
-- [ ] `WN.punctuated`
-- [ ] `WN.since-last`
-- [ ] `WN.calendar`
-- [ ] `WN.empty`
+- [x] `WN.tumbling`
+- [x] `WN.sliding`
+- [x] `WN.session`
+- [x] `WN.count`
+- [x] `WN.landmark`
+- [x] `WN.punctuated`
+- [x] `WN.since-last`
+- [x] `WN.calendar`
+- [x] `WN.empty`
 
 ### CX (§7)
 
-- [ ] `CX.temporal`
-- [ ] `CX.segmentation`
-- [ ] `CX.spatial`
-- [ ] `CX.state`
-- [ ] `CX.entity`
-- [ ] `CX.activation`
-- [ ] `CX.composite`
+- [x] `CX.temporal`
+- [x] `CX.segmentation`
+- [x] `CX.spatial`
+- [x] `CX.state`
+- [x] `CX.entity`
+- [x] `CX.activation`
+- [x] `CX.composite`
 
 ### AG (§8)
 
-- [ ] `AG.count`
-- [ ] `AG.multiplicity`
-- [ ] `AG.events`
-- [ ] `AG.sum`
-- [ ] `AG.min`
-- [ ] `AG.max`
-- [ ] `AG.avg`
-- [ ] `AG.variance`
-- [ ] `AG.first`
-- [ ] `AG.last`
-- [ ] `AG.span`
-- [ ] `AG.sources`
-- [ ] `AG.collect`
-- [ ] `AG.argmax`
-- [ ] `AG.argmin`
-- [ ] `AG.median`
-- [ ] `AG.percentile`
-- [ ] `AG.count-distinct`
-- [ ] `AG.mode`
-- [ ] `AG.top-k`
-- [ ] `AG.approx`
-- [ ] `AG.incremental`
+- [x] `AG.count`
+- [x] `AG.multiplicity`
+- [x] `AG.events`
+- [x] `AG.sum`
+- [x] `AG.min`
+- [x] `AG.max`
+- [x] `AG.avg`
+- [x] `AG.variance`
+- [x] `AG.first`
+- [x] `AG.last`
+- [x] `AG.span`
+- [x] `AG.sources`
+- [x] `AG.collect`
+- [x] `AG.argmax`
+- [x] `AG.argmin`
+- [x] `AG.median`
+- [x] `AG.percentile`
+- [x] `AG.count-distinct`
+- [x] `AG.mode`
+- [x] `AG.top-k`
+- [x] `AG.approx`
+- [x] `AG.incremental`
 
 ### JN (§9)
 
-- [ ] `JN.window`
-- [ ] `JN.interval`
-- [ ] `JN.table`
-- [ ] `JN.as-of`
-- [ ] `JN.outer`
+- [x] `JN.window`
+- [x] `JN.interval`
+- [x] `JN.table`
+- [x] `JN.as-of`
+- [x] `JN.outer`
 
 ### AL (§10)
 
-- [ ] `AL.before`
-- [ ] `AL.after`
-- [ ] `AL.meets`
-- [ ] `AL.met-by`
-- [ ] `AL.overlaps`
-- [ ] `AL.overlapped-by`
-- [ ] `AL.starts`
-- [ ] `AL.started-by`
-- [ ] `AL.during`
-- [ ] `AL.contains`
-- [ ] `AL.finishes`
-- [ ] `AL.finished-by`
-- [ ] `AL.equals`
+- [x] `AL.before`
+- [x] `AL.after`
+- [x] `AL.meets`
+- [x] `AL.met-by`
+- [x] `AL.overlaps`
+- [x] `AL.overlapped-by`
+- [x] `AL.starts`
+- [x] `AL.started-by`
+- [x] `AL.during`
+- [x] `AL.contains`
+- [x] `AL.finishes`
+- [x] `AL.finished-by`
+- [x] `AL.equals`
 
 ### PT (§11)
 
-- [ ] `PT.sequence`
-- [ ] `PT.primitive`
-- [ ] `PT.activation`
-- [ ] `PT.conjunction`
-- [ ] `PT.disjunction`
-- [ ] `PT.negation`
-- [ ] `PT.absence`
-- [ ] `PT.span-absence`
-- [ ] `PT.kleene-plus`
-- [ ] `PT.kleene-star`
-- [ ] `PT.repeat`
-- [ ] `PT.any`
-- [ ] `PT.within`
-- [ ] `PT.where`
-- [ ] `PT.aperiodic`
-- [ ] `PT.aperiodic-cumulative`
-- [ ] `PT.periodic`
-- [ ] `PT.periodic-cumulative`
-- [ ] `PT.threshold`
-- [ ] `PT.trend.increasing`
-- [ ] `PT.trend.decreasing`
-- [ ] `PT.trend.non-increasing`
-- [ ] `PT.trend.non-decreasing`
-- [ ] `PT.trend.stable`
-- [ ] `PT.trend.mixed`
-- [ ] `PT.relative`
-- [ ] `PT.spatial.distance`
-- [ ] `PT.spatial.moving`
-- [ ] `PT.accumulate`
-- [ ] `PT.flush`
-- [ ] `PT.silence`
-- [ ] `PT.recovery`
-- [ ] `PT.window-close`
-- [ ] `PT.schedule`
+- [x] `PT.sequence`
+- [x] `PT.primitive`
+- [x] `PT.activation`
+- [x] `PT.conjunction`
+- [x] `PT.disjunction`
+- [x] `PT.negation`
+- [x] `PT.absence`
+- [x] `PT.span-absence`
+- [x] `PT.kleene-plus`
+- [x] `PT.kleene-star`
+- [x] `PT.repeat`
+- [x] `PT.any`
+- [x] `PT.within`
+- [x] `PT.where`
+- [x] `PT.aperiodic`
+- [x] `PT.aperiodic-cumulative`
+- [x] `PT.periodic`
+- [x] `PT.periodic-cumulative`
+- [x] `PT.threshold`
+- [x] `PT.trend.increasing`
+- [x] `PT.trend.decreasing`
+- [x] `PT.trend.non-increasing`
+- [x] `PT.trend.non-decreasing`
+- [x] `PT.trend.stable`
+- [x] `PT.trend.mixed`
+- [x] `PT.relative`
+- [x] `PT.spatial.distance`
+- [x] `PT.spatial.moving`
+- [x] `PT.accumulate`
+- [x] `PT.flush`
+- [x] `PT.silence`
+- [x] `PT.recovery`
+- [x] `PT.window-close`
+- [x] `PT.schedule`
 
 ### SEL (§12)
 
-- [ ] `SEL.next`
-- [ ] `SEL.strict`
-- [ ] `SEL.partition`
-- [ ] `SEL.any`
+- [x] `SEL.next`
+- [x] `SEL.strict`
+- [x] `SEL.partition`
+- [x] `SEL.any`
 
 ### CON (§12)
 
-- [ ] `CON.cumulative`
-- [ ] `CON.retain`
-- [ ] `CON.recent`
-- [ ] `CON.unrestricted`
-- [ ] `CON.chronicle`
-- [ ] `CON.continuous`
+- [x] `CON.cumulative`
+- [x] `CON.retain`
+- [x] `CON.recent`
+- [x] `CON.unrestricted`
+- [x] `CON.chronicle`
+- [x] `CON.continuous`
 
 ### OUT (§12)
 
-- [ ] `OUT.rate-limit`
-- [ ] `OUT.coalesce`
-- [ ] `OUT.first`
-- [ ] `OUT.timeout-partial`
-- [ ] `OUT.edge`
-- [ ] `OUT.every`
-- [ ] `OUT.last`
-- [ ] `OUT.maximal`
+- [x] `OUT.rate-limit`
+- [x] `OUT.coalesce`
+- [x] `OUT.first`
+- [x] `OUT.timeout-partial`
+- [x] `OUT.edge`
+- [x] `OUT.every`
+- [x] `OUT.last`
+- [x] `OUT.maximal`
 
 ### SKIP (§12)
 
-- [ ] `SKIP.no-skip`
-- [ ] `SKIP.to-next`
-- [ ] `SKIP.past-last`
-- [ ] `SKIP.to-first`
-- [ ] `SKIP.to-last`
+- [x] `SKIP.no-skip`
+- [x] `SKIP.to-next`
+- [x] `SKIP.past-last`
+- [x] `SKIP.to-first`
+- [x] `SKIP.to-last`
 
 ### EVAL (§12)
 
-- [ ] `EVAL.immediate`
-- [ ] `EVAL.deferred`
+- [x] `EVAL.immediate`
+- [x] `EVAL.deferred`
 
 ### DR (§13)
 
-- [ ] `DR.summary`
-- [ ] `DR.view`
-- [ ] `DR.output-identity`
-- [ ] `DR.derive`
-- [ ] `DR.ordered`
-- [ ] `DR.closure`
-- [ ] `DR.cycle-guard`
-- [ ] `DR.act`
-- [ ] `DR.retract`
+- [x] `DR.summary`
+- [x] `DR.view`
+- [x] `DR.output-identity`
+- [x] `DR.derive`
+- [x] `DR.ordered`
+- [x] `DR.closure`
+- [x] `DR.cycle-guard`
+- [x] `DR.act`
+- [x] `DR.retract`
 
 ### RL (§14)
 
-- [ ] `RL.rejudge`
-- [ ] `RL.template`
-- [ ] `RL.binding`
-- [ ] `RL.fan-out`
-- [ ] `RL.identity`
-- [ ] `RL.source`
-- [ ] `RL.ownership`
-- [ ] `RL.dangling`
-- [ ] `RL.semantics`
-- [ ] `RL.carry`
-- [ ] `RL.converge`
+- [x] `RL.rejudge`
+- [x] `RL.template`
+- [x] `RL.binding`
+- [x] `RL.fan-out`
+- [x] `RL.identity`
+- [x] `RL.source`
+- [x] `RL.ownership`
+- [x] `RL.dangling`
+- [x] `RL.semantics`
+- [x] `RL.carry`
+- [x] `RL.converge`
