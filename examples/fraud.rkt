@@ -255,3 +255,29 @@
   #:timeout-partial ((minutes 10) processing-time) #:retain (timeout)
   (kleene+ (d : Decline))
   #:where (>= (count d) 5))
+
+;; ---------------------------------------------------------------------------
+;; Derivation (§13)
+
+(event-type Escalation [card : String] [reasons : Any] #:derived)
+
+;; DR.closure: alerts are events too, and a pattern reads them: two alerts
+;; of different reasons for one card within an hour escalate
+(define-stream alerts (merge unconfirmed login-and-payment))
+(define-pattern escalations #:from alerts #:key card #:within (hours 1)
+  (and (a : Alert) (b : Alert))
+  #:where (string<? a.reason b.reason)
+  #:emit (Escalation [card a.card] [reasons (list a.reason b.reason)]))
+
+;; DR.act: every escalation notifies the fraud desk; each notification is
+;; recorded as an event
+(define notified (box '()))
+(act notify #:on escalations
+  #:do (begin (set-box! notified (cons card (unbox notified))) 'sent)
+  #:completion Notified)
+
+;; DR.cycle-guard: a review of each escalation (level 3) is fed back and
+;; reviewed once more (level 4); the cycle guard stops the loop there
+(define-stream reviews #:recursive 4 (from escalations) (feedback reviews) (map [reviewed #t]))
+
+(provide notified)
