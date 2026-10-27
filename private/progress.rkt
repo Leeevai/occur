@@ -5,7 +5,8 @@
          racket/list
          "time.rkt"
          "event.rkt"
-         "operator.rkt")
+         "operator.rkt"
+         "scheduler.rkt")
 
 ;; ===========================================================================
 ;; TM.keyed-watermark
@@ -182,3 +183,34 @@
   [idle-operator (->* (duration?) (#:clock (or/c 'processing-time 'hybrid)
                                    #:key (or/c #f (-> event? any/c)))
                       operator?)]))
+
+;; ===========================================================================
+;; TM.schedule: processing-time timers at every tick of a calendar
+;; expression. The schedule is a generator. Ticks that came due while the
+;; engine was suspended fire once, together: one Tick event whose `ticks`
+;; attribute counts them (OUT.coalesce), with the interval [first, last].
+
+(struct schedule-state (handled next) #:transparent)
+
+(define (schedule-operator expr)
+  (define c (if (cron? expr) expr (parse-cron expr)))
+  (make-operator
+   'schedule
+   #:arity 0
+   #:monotone? #f
+   #:init-key (λ (g k ctx) (schedule-state (ctx-now ctx) (cron-next c (ctx-now ctx))))
+   #:deadline (λ (s) (schedule-state-next s))
+   #:on-timer
+   (λ (g s ctx)
+     (define ticks (cron-ticks-between c (schedule-state-handled s) (ctx-now ctx)))
+     (cond
+       [(null? ticks) s]
+       [else
+        (emit! ctx (make-event 'Tick `((ticks . ,(length ticks)) (first . ,(first ticks))
+                                       (last . ,(last ticks)) (expr . ,(cron-text c)))
+                               #:ts (first ticks) #:te (last ticks) #:src 'schedule))
+        (schedule-state (last ticks) (cron-next c (last ticks)))]))))
+
+(provide
+ (contract-out
+  [schedule-operator (-> (or/c string? cron?) operator?)]))

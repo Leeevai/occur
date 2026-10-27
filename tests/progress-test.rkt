@@ -111,3 +111,15 @@
   ;; hybrid: the newest event time (10) plus 60, compared with the clock
   (check-equal? (map output-at (run-result-outputs h)) '(70 360))
   (check-equal? (map (λ (e) (event-attr e 'since)) (run-result-events h)) '(10 300)))
+
+(define (clock-at h mi) (utc 2026 1 5 h mi))
+
+(spec-test '(TM.schedule OUT.coalesce) "a schedule ticks in processing time; missed ticks fire once, together"
+  (define n (make-node 'hourly (schedule-operator "0 * * * *") '() #:sink? #t))
+  (define r (run (make-program (list n))
+                 (list (advance-to (clock-at 10 50)) (suspend (clock-at 10 50) (clock-at 13 10))
+                       (advance-to (clock-at 14 30)))
+                 #:clock (simulated-clock (clock-at 10 20))))
+  (check-equal? (map output-at (run-result-outputs r)) (list (clock-at 13 10) (clock-at 14 0)))
+  (check-equal? (map (λ (e) (list (event-attr e 'ticks) (event-ts e) (event-te e))) (run-result-events r))
+                (list (list 3 (clock-at 11 0) (clock-at 13 0)) (list 1 (clock-at 14 0) (clock-at 14 0)))))
