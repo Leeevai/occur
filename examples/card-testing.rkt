@@ -58,3 +58,29 @@
 ;; with ts = 1, te = 4, and C = {e1, e2, e4}. Maximal output is deferred: it
 ;; is emitted once the watermark passes 11 minutes (ts = 1 plus the bound),
 ;; when no further extension is possible.
+
+;; ---------------------------------------------------------------------------
+;; Trace A′, negation scope: trace A plus Verified(c1) at 3.5 minutes, under
+;; skip-till-any-match with every output.
+
+(source trace-a-prime #:types (Swipe Verified) #:key card #:watermark ascending
+  #:from (events (Swipe #:at (minutes 1) #:id "e1" [card "c1"] [amount 2])
+                 (Swipe #:at (minutes 2) #:id "e2" [card "c1"] [amount 600])
+                 (Swipe #:at (minutes 3) #:id "e3" [card "c1"] [amount 50])
+                 (Verified #:at (minutes 7/2) #:id "v1" [card "c1"])
+                 (Swipe #:at (minutes 4) #:id "e4" [card "c1"] [amount 900])))
+
+;; ¬Verified between a and b+: the forbidden gap runs from te(a) to the
+;; first b. {e1, e4} is blocked, because its gap (1, 4) contains 3.5.
+(card-testing gap-negation trace-a-prime any every)  ; {e1, e2}, {e1, e2, e4}
+
+;; unless Verified over the whole pattern: a match is blocked when its span
+;; contains a Verified, so only {e1, e2}, whose span (1, 2) does not contain
+;; 3.5, survives.
+(define-pattern span-negation #:from trace-a-prime #:within (minutes 10)
+  #:selection any #:consumption unrestricted #:output every
+  (unless (seq (a : Swipe (< amount 5))
+               (kleene+ (b : Swipe (> amount 500))))
+          Verified)
+  #:where (increasing b.amount)
+  #:emit (SuspectedFraud [card a.card] [n (count b)] [total (sum b.amount)]))  ; {e1, e2}
