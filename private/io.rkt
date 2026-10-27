@@ -123,3 +123,15 @@
 (provide
  (contract-out
   [checked-event (-> event-type? event? string? event?)]))
+
+;; A directory in JSON Lines: {"id": entity, "status": "active" | "deprecated" | "removed"}
+(define (read-jsonl-directory path)
+  (call-with-input-file path
+    (λ (in)
+      (for/list ([line (in-lines in)] #:unless (string=? (string-trim line) ""))
+        (define h (string->jsexpr line))
+        (cons (hash-ref h 'id) (hash-ref h 'status "active"))))))
+
+(provide
+ (contract-out
+  [read-jsonl-directory (-> path-string? (listof pair?))]))

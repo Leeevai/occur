@@ -276,3 +276,23 @@
                       step:control?)]
   [entity-context-operator (-> any/c #:key (-> event? any/c) operator?)]
   [activations-operator operator?]))
+
+;; A declared directory: a name and a loader for its entries, a list of
+;; (entity . status) with status active, inactive (or deprecated), or removed.
+(struct directory-decl (name loader) #:transparent)
+
+(define (normalize-status v)
+  (case (if (string? v) (string->symbol v) v)
+    [(active) 'active]
+    [(inactive deprecated) 'inactive]
+    [(removed deleted) 'removed]
+    [else (raise-arguments-error 'directory "unknown entity status" "status" v)]))
+
+(define (directory-entries d)
+  (for/list ([p (in-list ((directory-decl-loader d)))]) (cons (car p) (normalize-status (cdr p)))))
+
+(provide
+ (contract-out
+  [struct directory-decl ([name any/c] [loader (-> list?)])]
+  [normalize-status (-> (or/c symbol? string?) (or/c 'active 'inactive 'removed))]
+  [directory-entries (-> directory-decl? list?)]))
