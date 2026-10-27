@@ -17,7 +17,7 @@ This file is the resume point for work on occur. Read it, together with
 | M8 | Joins | §9 | done |
 | M9 | Allen relations | §10 | done |
 | M10 | Pattern AST and reference oracle | §11 | done (PT.flush follows with M12) |
-| M11 | Incremental pattern engine, deadline scheduler, differential tests | §11, §17 | todo |
+| M11 | Incremental pattern engine, deadline scheduler, differential tests | §11, §17 | done |
 | M12 | Selection, consumption, output, skip, and evaluation policies | §12 | todo |
 | M13 | Derivation | §13 | todo |
 | M14 | Rules as data | §14 | todo |
@@ -29,12 +29,12 @@ This file is the resume point for work on occur. Read it, together with
 
 ## Next step
 
-M11: the incremental engine (`private/pattern/nfa.rkt`): a tree of
-incremental match automata with partial-match buffers per operator,
-deferred evaluation of non-monotone operators at the watermark, pruning by
-`within`, and processing-time (hybrid) deadlines for absence; differential
-property tests against the oracle (SEL.any, CON.unrestricted) and the
-selection nesting property; make it the default engine of define-pattern.
+M12: the policies of §12 in `private/pattern/policies.rkt`: selection
+checks (strict, partition, next) registered with the engine and as an
+oracle filter, with the nesting property strict ⊆ partition ⊆ next ⊆ any;
+consumption (recent, chronicle, continuous, cumulative, retain); output
+(first, last, maximal, timeout-partial, edge, rate-limit, coalesce); skip
+strategies; immediate evaluation; PT.flush; then trace A's table of §15.
 
 Notes:
 - Hosted CI runs are blocked by the account's GitHub billing; every commit
