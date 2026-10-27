@@ -256,7 +256,10 @@
               (define c (first-closer-of ctx o closes))
               (cond
                 [(and c (> W (pmatch-ts c)))
-                 (define inside (filter (λ (b) (and (< (pmatch-te o) (pmatch-ts b)) (< (pmatch-te b) (pmatch-ts c)))) bodies))
+                 ;; a list binding is time-ordered (§11.1)
+                 (define inside (sort (filter (λ (b) (and (< (pmatch-te o) (pmatch-ts b)) (< (pmatch-te b) (pmatch-ts c)))) bodies)
+                                      (λ (x y) (or (< (pmatch-ts x) (pmatch-ts y))
+                                                   (and (= (pmatch-ts x) (pmatch-ts y)) (< (pmatch-te x) (pmatch-te y)))))))
                  (define base (pmatch-union ctx o (struct-copy pmatch empty-match [bindings (for/hasheq ([n names]) (values n '()))])))
                  (values (cons (pmatch-union ctx (for/fold ([acc base]) ([b inside]) (pmatch-union ctx acc (lift b))) c) out)
                          (hash-set done (pmatch-key o) #t))]

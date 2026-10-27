@@ -398,6 +398,9 @@
               (deadlines-pop-due (runner-pdl r) (+ limit (/ 1 1000000000))))))
       (when token
         (set-runner-pdl! r pdl)
+        ;; outputs of an earlier instant are delivered before time moves on, so
+        ;; grouping by key (DR.ordered) never reorders instants
+        (when (> t (runner-now r)) (flush-outbox! r))
         (set-runner-now! r (time-max (runner-now r) t))
         (define name (car token))
         (define key (cdr token))
@@ -450,6 +453,7 @@
   (define t (step-time s))
   (when (and t (not (step:suspend? s)))
     (fire-processing-deadlines! r t)
+    (when (> t (runner-now r)) (flush-outbox! r))
     (set-runner-now! r (time-max (runner-now r) t)))
   (match s
     [(step:arrive _ src e)

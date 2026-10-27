@@ -337,7 +337,10 @@
          (define names (map car (pattern-bindings (p:aperiodic-body p) #t)))
          (define base (pmatch-union ctx e1 (struct-copy pmatch empty-match
                                                         [bindings (for/hasheq ([n names]) (values n '()))])))
-         (list (pmatch-union ctx (for/fold ([acc base]) ([e2 (in-list inside)]) (pmatch-union ctx acc (lift e2)))
+         ;; a list binding is time-ordered (§11.1)
+         (define ordered (sort inside (λ (x y) (or (< (pmatch-ts x) (pmatch-ts y))
+                                                   (and (= (pmatch-ts x) (pmatch-ts y)) (< (pmatch-te x) (pmatch-te y)))))))
+         (list (pmatch-union ctx (for/fold ([acc base]) ([e2 (in-list ordered)]) (pmatch-union ctx acc (lift e2)))
                              e3))])))))
 
 ;; ===========================================================================
