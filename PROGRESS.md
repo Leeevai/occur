@@ -15,7 +15,7 @@ This file is the resume point for work on occur. Read it, together with
 | M6 | Windows and contexts | §7 | done |
 | M7 | Aggregation | §8 | done |
 | M8 | Joins | §9 | done |
-| M9 | Allen relations | §10 | todo |
+| M9 | Allen relations | §10 | done |
 | M10 | Pattern AST and reference oracle | §11 | todo |
 | M11 | Incremental pattern engine, deadline scheduler, differential tests | §11, §17 | todo |
 | M12 | Selection, consumption, output, skip, and evaluation policies | §12 | todo |
@@ -29,10 +29,11 @@ This file is the resume point for work on occur. Read it, together with
 
 ## Next step
 
-M9: Allen's interval algebra in `private/allen.rkt` (the 13 relations
-between proper intervals, point/point and point/interval relations) as
-functions usable in stage and pattern predicates, with a property test that
-exactly one relation holds.
+M10: the pattern AST (`private/pattern/ast.rkt`, mirroring §11.2 with ACT)
+and the reference oracle (`private/pattern/reference.rkt`, a direct
+transcription of §11.3), one operator per commit, then the derived
+families of §11.4. From M10 on, `tests/coverage.rkt` enforces that every ID
+in docs/coverage.md has a tagged test.
 
 Notes:
 - Hosted CI runs are blocked by the account's GitHub billing; every commit
