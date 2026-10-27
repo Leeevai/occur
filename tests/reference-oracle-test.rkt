@@ -108,3 +108,7 @@
   (check-equal? (length ms) (+ 4 2 2))         ; A∧B: 4, A∧C: 2, B∧C: 2
   (check-equal? (map pmatch-key (denote (any-of 1 A C) H)) (map pmatch-key (denote (disj A C) H)))
   (check-equal? (map pmatch-key (denote (any-of 2 A B) H)) (map pmatch-key (denote (conj A B) H))))
+
+(spec-test 'PT.within "⟦P within Δ⟧ bounds the span of a match"
+  (check-equal? (ids (denote (within (seq A B) 1) H)) '(("a1" "b1") ("a2" "b2")))
+  (check-equal? (ids (denote (within (seq A B) 3) H)) '(("a1" "b1") ("a1" "b2") ("a2" "b2"))))

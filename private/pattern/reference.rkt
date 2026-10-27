@@ -274,3 +274,12 @@
      (for/fold ([acc (car ms)]) ([m (in-list (cdr ms))]) (pmatch-union ctx acc m)))))
 
 (define (in-indexed l) (in-parallel (in-list l) (in-naturals)))
+
+;; ===========================================================================
+;; PT.within: ⟦P within Δ⟧ = { m ∈ ⟦P⟧ : te(m) − ts(m) <= Δ }
+
+(register!
+ p:within?
+ (λ (ctx p denote)
+   (filter (λ (m) (<= (- (pmatch-te m) (pmatch-ts m)) (p:within-duration p)))
+           (denote (p:within-body p)))))
