@@ -25,7 +25,7 @@
 
 (define-syntax (event-type stx)
   (syntax-parse stx
-    [(_ name:id (~optional (~and #:derived derived)) [attr:id (~datum :) dom] ...)
+    [(_ name:id (~alt (~optional (~and #:derived derived)) [attr:id (~datum :) dom]) ...)
      (define dup (check-duplicates (syntax->list #'(attr ...)) #:key syntax-e))
      (when dup (raise-syntax-error #f "duplicate attribute name" stx dup))
      (define parsed (for/list ([d (syntax->list #'(dom ...))])
