@@ -1,6 +1,6 @@
 # 0015. Checkpoint, restore, and cold-start replay
 
-- Status: accepted
+- Status: accepted; amended by [0017](0017-reflex-library.md) (outputs held at a rules node)
 - Date: 2026-10-27
 - Spec: §6 (TM.checkpoint, TM.replay), §13 (OUT.coalesce, DR.output-identity), §16.4
 
@@ -55,6 +55,14 @@ runner instead.
   windows, sums windows and samples, and recomputes the identity. Each merged output is then judged against the
   state in force; an output whose instance is gone is dropped and counted as
   `dropped-after-replay`.
+
+**Amendment (decision 0017).** Outputs held at the sinks lose the
+instances when stages follow the rules node: a trigger stream re-keyed by
+device would merge every trigger of a device and judge none. During a
+replay the events of a node that judges or coalesces its own outputs are
+therefore held at that node, released one per (node, instance, port),
+judged, and then sent through the later stages; other sinks' outputs are
+held and released as above.
 
 ## Consequences
 
