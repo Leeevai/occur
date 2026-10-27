@@ -39,9 +39,11 @@
   (if (eq? mode 'any) (keyed-wm-any w kinds) (keyed-wm-all w kinds)))
 
 ;; An operator that tracks W_k per key and emits a Progress event whenever it
-;; advances: payload (key, watermark, mode). Events pass through on port 0;
-;; progress goes to port 1.
-(define (keyed-watermark-operator #:key key #:kind kind #:kinds [kinds #f] #:mode [mode 'all])
+;; advances: payload (key, watermark, mode). With #:pass-through? the events
+;; pass on port 0 and progress goes to port 1; otherwise only progress is
+;; emitted, on port 0.
+(define (keyed-watermark-operator #:key key #:kind kind #:kinds [kinds #f] #:mode [mode 'all]
+                                  #:pass-through? [pass? #t])
   (make-operator
    'keyed-watermark
    #:outputs 2
@@ -49,7 +51,7 @@
    #:init-key (λ (g k c) empty-keyed-wm)
    #:on-event
    (λ (g w e c)
-     (emit! c e 0)
+     (when pass? (emit! c e 0))
      (define m (kind e))
      (cond
        [(and kinds (not (member m kinds))) w]
@@ -60,7 +62,7 @@
         (when (> after before)
           (emit! c (make-event 'Progress `((key . ,(ctx-key c)) (watermark . ,after) (mode . ,mode))
                                #:at after #:src 'keyed-watermark #:constituents (list e))
-                 1))
+                 (if pass? 1 0)))
         w2]))))
 
 (provide
@@ -73,7 +75,8 @@
   [keyed-wm-all (-> keyed-wm? (or/c #f list?) time?)]
   [keyed-wm-value (-> keyed-wm? (or/c 'any 'all) (or/c #f list?) time?)]
   [keyed-watermark-operator (->* (#:key (-> event? any/c) #:kind (-> event? any/c))
-                                 (#:kinds (or/c #f list?) #:mode (or/c 'any 'all))
+                                 (#:kinds (or/c #f list?) #:mode (or/c 'any 'all)
+                                  #:pass-through? boolean?)
                                  operator?)]))
 
 ;; ===========================================================================
@@ -214,3 +217,12 @@
 (provide
  (contract-out
   [schedule-operator (-> (or/c string? cron?) operator?)]))
+
+;; A correction (TM.retraction) is ⊖e_old followed by e_new.
+(define (emit-correction! ctx old new)
+  (emit! ctx (retraction old))
+  (emit! ctx new))
+
+(provide
+ (contract-out
+  [emit-correction! (-> ctx? event? event? void?)]))

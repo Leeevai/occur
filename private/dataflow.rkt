@@ -317,7 +317,8 @@
     (define port (car pe))
     (define item (cdr pe))
     (when (event? item) (record-provenance! r name item))
-    (when (and (node-sink?* r name) (not (signal? item)))
+;; a sink's outputs are its port-0 emissions; other ports are side outputs
+    (when (and (node-sink?* r name) (= port 0) (not (signal? item)))
       (define k (if (and (operator-instance-of op) (event? item)) ((operator-instance-of op) item) key))
       (set-runner-outbox! r (cons (output (runner-now r) name k item) (runner-outbox r))))
     (for ([d (in-list (hash-ref (program-downstream prog) (cons name port) '()))])
