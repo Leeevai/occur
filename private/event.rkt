@@ -369,3 +369,57 @@
                        (#:ts (or/c #f time?) #:te (or/c #f time?) #:n exact-nonnegative-integer?
                         #:id any/c #:src any/c)
                        event?)]))
+
+;; ===========================================================================
+;; ES.space: the inductive event space
+;;
+;;   𝓔⁰   = primitive events: τ primitive, v ∈ D_τ, ts <= te, n ∈ ℕ, C = ∅
+;;   𝓔ⁿ⁺¹ = 𝓔ⁿ ∪ derived events whose C is a finite non-empty subset of 𝓔ⁿ
+;;   𝓔    = ⋃ₙ 𝓔ⁿ
+;;
+;; A derived event that carries a summary instead of its constituents
+;; (DR.summary, the third exception of §2.6) is admitted at level 1 when its
+;; payload has a `summary` attribute.
+
+(define (event-level e)
+  (define cs (event-constituents e))
+  (if (null? cs) (if (summarized? e) 1 0) (add1 (apply max (map event-level cs)))))
+
+(define (summarized? e) (hash-has-key? (event-payload e) 'summary))
+
+;; event-space-problem : event registry -> (or/c #f string?)
+(define (event-space-problem e registry)
+  (define t (hash-ref registry (event-type e) #f))
+  (cond
+    [(not t) (format "~a: type ~a is not in T" (event-id e) (event-type e))]
+    [(payload-problem t (event-payload e))
+     => (λ (p) (format "~a: payload not in D_~a: ~a" (event-id e) (event-type e) p))]
+    [(and (event-type-primitive? t) (pair? (event-constituents e)))
+     (format "~a: a primitive event has no constituents" (event-id e))]
+    [(and (event-type-derived? t) (null? (event-constituents e)) (not (summarized? e)))
+     (format "~a: a derived event needs constituents or a summary" (event-id e))]
+    [else (for/or ([c (in-list (event-constituents e))])
+            (event-space-problem c registry))]))
+
+(define (event-space-member? e registry) (not (event-space-problem e registry)))
+
+;; The compact form, ignoring provenance: ⋃_τ {τ} × D_τ × {(ts, te) : ts <= te} × ℕ
+(define (erase-provenance e)
+  (vector (event-type e) (event-payload e) (event-ts e) (event-te e) (event-n e)))
+
+;; 𝓔_τ: the restriction to one type
+(define (restrict-to-type events τ)
+  (filter (λ (e) (eq? (event-type e) τ)) events))
+
+;; 𝓔 = 𝓔_P ⊎ 𝓔_D
+(define (split-primitive/derived events)
+  (partition event-primitive? events))
+
+(provide
+ (contract-out
+  [event-level (-> event? exact-nonnegative-integer?)]
+  [event-space-problem (-> event? type-registry? (or/c #f string?))]
+  [event-space-member? (-> event? type-registry? boolean?)]
+  [erase-provenance (-> event? vector?)]
+  [restrict-to-type (-> (listof event?) symbol? (listof event?))]
+  [split-primitive/derived (-> (listof event?) (values (listof event?) (listof event?)))]))
