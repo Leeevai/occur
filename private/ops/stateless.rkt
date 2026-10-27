@@ -75,3 +75,39 @@
                       #:te (or/c #f (-> event? time?))
                       #:n (or/c #f (-> event? exact-nonnegative-integer?)))
                      operator?)]))
+
+;; ---------------------------------------------------------------------------
+;; OP.enrich: e ↦ e ⊕ R(k(e)) with a reference lookup R keyed by k(e).
+;; R returns a payload of attributes to add (they override same-named
+;; attributes of e) or #f when it has nothing for the key; #:missing then
+;; decides whether e passes unchanged ('keep) or is dropped ('drop).
+
+(define (enrich-operator lookup #:key key #:missing [missing 'keep] #:type [type #f])
+  (stateless-operator
+   'enrich
+   (λ (e c)
+     (define extra (lookup (key e)))
+     (cond
+       [extra
+        (emit! c (derive-from e (or type (event-type e))
+                              (for/fold ([p (event-payload e)]) ([(k v) (in-hash (->hash extra))])
+                                (hash-set p k v))
+                              #:src 'enrich))]
+       [(eq? missing 'keep)
+        (emit! c (derive-from e (or type (event-type e)) (event-payload e) #:src 'enrich))]
+       [else (count! c 'unenriched)]))))
+
+(define (->hash v)
+  (cond [(hash? v) v]
+        [(list? v) (for/hasheq ([p (in-list v)]) (values (car p) (cdr p)))]
+        [else (raise-argument-error 'enrich "(or/c hash? (listof pair?))" v)]))
+
+;; A lookup over a fixed table: key -> payload.
+(define (table-lookup table) (λ (k) (hash-ref table k #f)))
+
+(provide
+ (contract-out
+  [enrich-operator (->* ((-> any/c any/c) #:key (-> event? any/c))
+                        (#:missing (or/c 'keep 'drop) #:type (or/c #f symbol?))
+                        operator?)]
+  [table-lookup (-> hash? (-> any/c any/c))]))

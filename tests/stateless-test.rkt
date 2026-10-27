@@ -58,3 +58,20 @@
                                        #:n (λ (e) 2))
                          (list r))))
   (check-equal? (list (event-ts out) (event-te out) (event-n out)) '(7 7 2)))
+
+(spec-test 'OP.enrich "e ⊕ R(k(e)) adds the reference attributes keyed by k(e)"
+  (define merchants (hash "m1" (hasheq 'category "grocery") "m2" '((category . "travel"))))
+  (define in (list (make-event 'Swipe '((merchant . "m1") (amount . 5)) #:id "a" #:at 1)
+                   (make-event 'Swipe '((merchant . "m9") (amount . 7)) #:id "b" #:at 2)))
+  (define op (enrich-operator (table-lookup merchants) #:key (λ (e) (event-attr e 'merchant))))
+  (define out (run1 op in))
+  (check-equal? (event-attr (car out) 'category) "grocery")
+  (check-equal? (event-attr (car out) 'amount) 5)
+  (check-equal? (map event-id (event-constituents (car out))) '("a"))
+  ;; a key with no reference row passes unchanged by default
+  (check-false (event-has-attr? (cadr out) 'category))
+  (define r (run-operator (enrich-operator (table-lookup merchants) #:key (λ (e) (event-attr e 'merchant))
+                                           #:missing 'drop)
+                          (list in)))
+  (check-equal? (length (run-result-events r)) 1)
+  (check-equal? (run-result-counter r 'op 'unenriched) 1))
