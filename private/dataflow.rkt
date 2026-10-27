@@ -265,7 +265,7 @@
   (when (and d (not (and stalled? (<= d (runner-now r)))))
     (set-runner-pdl! r (deadlines-arm (runner-pdl r) (cons name key) d)))
   (define ed ((operator-event-deadline op) kstate))
-  (when (and ed (not (and stalled? (<= ed (W r name)))))
+  (when (and ed (not (and stalled? (deadline-due? ed (W r name)))))
     (set-runner-edl! r (hash-update (runner-edl r) name (λ (dl) (deadlines-arm dl key ed))))))
 
 (define (set-key-state! r name key kstate)

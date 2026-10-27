@@ -9,7 +9,8 @@
 ;;   on-event    : g s event ctx -> s         an event arrives on (ctx-port ctx)
 ;;   on-timer    : g s ctx -> s               a deadline fired; (ctx-clock ctx) says which
 ;;   deadline    : s -> (or/c #f time)        next processing-time deadline
-;;   event-deadline : s -> (or/c #f time)     next event-time deadline (fires when W >= t)
+;;   event-deadline : s -> (or/c #f time)     next event-time deadline (fires when W >= t;
+;;                                            (strictly-after t) fires when W > t)
 ;;   on-watermark : g keys W ctx -> (values g keys)    optional
 ;;   on-control  : g keys msg ctx -> (values g keys)   optional, broadcast control
 ;;   on-signal   : g s-or-#f signal ctx -> s-or-#f     optional, in-band lifecycle signals
@@ -27,7 +28,8 @@
 ;; set of references (TM.checkpoint).
 (require racket/contract
          "time.rkt"
-         "event.rkt")
+         "event.rkt"
+         (only-in "scheduler.rkt" strictly-after?))
 
 ;; Items that flow along edges: events, retractions ⊖e, and signals.
 (struct retraction (event) #:transparent)
@@ -120,7 +122,7 @@
                        #:on-event (-> any/c any/c event? ctx? any/c)
                        #:on-timer (-> any/c any/c ctx? any/c)
                        #:deadline (-> any/c (or/c #f time?))
-                       #:event-deadline (-> any/c (or/c #f time?))
+                       #:event-deadline (-> any/c (or/c #f time? strictly-after?))
                        #:on-watermark (or/c #f (-> any/c hash? time? ctx? (values any/c hash?)))
                        #:on-control (or/c #f (-> any/c hash? any/c ctx? (values any/c hash?)))
                        #:on-signal (or/c #f (-> any/c any/c signal? ctx? any/c))

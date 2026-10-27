@@ -47,3 +47,13 @@
      (check-equal? (length popped) (hash-count expected))
      (for ([p popped]) (check-equal? (cdr p) (hash-ref expected (car p))))
      (check-equal? (map cdr popped) (sort (map cdr popped) <)))))
+
+(test-case "a strict deadline is due only once the limit exceeds it"
+  (define d (deadlines-arm empty-deadlines 'x (strictly-after 10)))
+  (define-values (t1 _1 d1) (deadlines-pop-due d 10))
+  (check-false t1)
+  (define-values (t2 at d2) (deadlines-pop-due d1 11))
+  (check-equal? (list t2 at) '(x 10))
+  ;; a plain deadline at the same time comes first and supersedes the strict one
+  (define both (deadlines-arm (deadlines-arm empty-deadlines 'y (strictly-after 5)) 'y 5))
+  (check-equal? (deadlines-armed-at both 'y) 5))

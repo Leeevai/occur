@@ -14,13 +14,29 @@
 (require racket/contract)
 
 ;; ---------------------------------------------------------------------------
-;; Immutable pairing heap of entries #(time seq token), ordered by (time, seq).
+;; A deadline is a time t (due when the limit reaches t) or (strictly-after t)
+;; (due only once the limit exceeds t). Event-time decisions such as "emit
+;; once W > te(m) + Δ" (PT.absence) arm strict deadlines.
+
+(struct strictly-after (time) #:transparent)
+(define (deadline-time d) (if (strictly-after? d) (strictly-after-time d) d))
+(define (deadline-strict? d) (strictly-after? d))
+;; (t, strict?) ordered lexicographically, non-strict first
+(define (deadline<? a b)
+  (or (< (deadline-time a) (deadline-time b))
+      (and (= (deadline-time a) (deadline-time b)) (not (deadline-strict? a)) (deadline-strict? b))))
+(define (deadline-due? d limit)
+  (if (deadline-strict? d) (< (deadline-time d) limit) (<= (deadline-time d) limit)))
+
+;; ---------------------------------------------------------------------------
+;; Immutable pairing heap of entries #(deadline seq token), ordered by
+;; (deadline, seq).
 
 (struct ph (entry subs))   ; subs: list of ph
 
 (define (entry<? a b)
-  (or (< (vector-ref a 0) (vector-ref b 0))
-      (and (= (vector-ref a 0) (vector-ref b 0))
+  (or (deadline<? (vector-ref a 0) (vector-ref b 0))
+      (and (equal? (vector-ref a 0) (vector-ref b 0))
            (< (vector-ref a 1) (vector-ref b 1)))))
 
 (define (ph-merge a b)
@@ -44,10 +60,10 @@
 
 (define empty-deadlines (deadlines #f (hash) 0 0))
 
-;; Arm `token` at time t, unless it already holds an earlier (or equal) deadline.
+;; Arm `token` at deadline t, unless it already holds an earlier (or equal) one.
 (define (deadlines-arm d token t)
   (define held (hash-ref (deadlines-armed d) token #f))
-  (if (and held (<= held t))
+  (if (and held (not (deadline<? t held)))
       d
       (deadlines (ph-insert (deadlines-heap d) (vector t (deadlines-seq d) token))
                  (hash-set (deadlines-armed d) token t)
@@ -56,17 +72,17 @@
 
 (define (deadlines-armed-at d token) (hash-ref (deadlines-armed d) token #f))
 
-;; The earliest live deadline, skipping superseded entries.
+;; The time of the earliest live deadline, skipping superseded entries.
 (define (deadlines-next d)
   (define h (deadlines-heap d))
   (cond [(not h) #f]
         [else (define e (ph-entry h))
               (if (equal? (hash-ref (deadlines-armed d) (vector-ref e 2) #f) (vector-ref e 0))
-                  (vector-ref e 0)
+                  (deadline-time (vector-ref e 0))
                   (deadlines-next (deadlines (ph-pop h) (deadlines-armed d) (deadlines-seq d)
                                              (sub1 (deadlines-size d)))))]))
 
-;; Pop the earliest live deadline at or before `limit`.
+;; Pop the earliest live deadline due at `limit`.
 ;; Returns (values token time d') or (values #f #f d') when none is due.
 ;; An entry is live when it is the deadline its token currently holds;
 ;; superseded entries are discarded without waking anyone.
@@ -83,8 +99,8 @@
        (cond
          [(not live?)
           (loop (deadlines (ph-pop h) (deadlines-armed d) (deadlines-seq d) (sub1 (deadlines-size d))))]
-         [(> t limit) (values #f #f d)]
-         [else (values token t (deadlines (ph-pop h)
+         [(not (deadline-due? t limit)) (values #f #f d)]
+         [else (values token (deadline-time t) (deadlines (ph-pop h)
                                           (hash-remove (deadlines-armed d) token)
                                           (deadlines-seq d)
                                           (sub1 (deadlines-size d))))])])))
@@ -92,13 +108,19 @@
 ;; Drop every pending deadline (used when timers are suspended and resumed).
 (define (deadlines-tokens d) (hash-keys (deadlines-armed d)))
 
+(define deadline/c (or/c real? strictly-after?))
+
 (provide
  empty-deadlines
+ deadline/c
  (contract-out
+  [struct strictly-after ([time real?])]
+  [deadline-time (-> deadline/c real?)]
+  [deadline-due? (-> deadline/c real? boolean?)]
   [deadlines? (-> any/c boolean?)]
   [deadlines-size (-> deadlines? exact-nonnegative-integer?)]
-  [deadlines-arm (-> deadlines? any/c real? deadlines?)]
-  [deadlines-armed-at (-> deadlines? any/c (or/c #f real?))]
+  [deadlines-arm (-> deadlines? any/c deadline/c deadlines?)]
+  [deadlines-armed-at (-> deadlines? any/c (or/c #f deadline/c))]
   [deadlines-next (-> deadlines? (or/c #f real?))]
   [deadlines-pop-due (-> deadlines? real? (values any/c (or/c #f real?) deadlines?))]
   [deadlines-tokens (-> deadlines? list?)]))

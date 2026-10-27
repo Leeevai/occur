@@ -228,3 +228,15 @@
   (define n (make-node 'seqs seqs (list src) #:sink? #t))
   (define r (run (make-program (list n)) (for/list ([k '(a b a)] [i (in-naturals)]) (arrive i 'in (ev (format "e~a" i) i `((k . ,k)))))))
   (check-equal? (map (λ (e) (event-attr e 'seq)) (run-result-events r)) '(0 1 2)))
+
+(require (only-in "../private/scheduler.rkt" strictly-after))
+
+(test-case "a strict event-time deadline fires once the watermark passes it"
+  (define op (make-operator 'after #:init-key (λ (g k c) 'wait)
+                            #:on-event (λ (g s e c) s)
+                            #:event-deadline (λ (s) (and (eq? s 'wait) (strictly-after 10)))
+                            #:on-timer (λ (g s c) (emit! c (make-event 'Fired '() #:at (ctx-watermark c))) 'done)))
+  (define n (make-node 'after op (list src) #:sink? #t))
+  (define r (run (make-program (list n))
+                 (list (arrive 1 'in (ev "a" 1)) (watermark-to 'in 10) (watermark-to 'in 11)) #:final-watermark? #f))
+  (check-equal? (map event-ts (run-result-events r)) '(11)))
