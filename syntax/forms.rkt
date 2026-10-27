@@ -281,7 +281,7 @@
         [body (raise-syntax-error 'define-pattern "only one pattern is allowed" stx (car xs))]
         [else (loop (cdr xs) opts (car xs))])))
   (define known-options '(#:from #:key #:within #:clock #:selection #:consumption #:output #:skip #:eval
-                          #:engine #:where #:emit))
+                          #:engine #:where #:emit #:timeout-partial #:retain))
   ;; heads that make a pattern non-monotone or unbounded
   (define (pattern-heads p)
     (syntax-parse p
@@ -317,7 +317,7 @@
        (cond
          [(hash-ref opts '#:skip #f)
           => (λ (s) (syntax-parse s
-                      [(~datum no-skip) ''no-skip] [(~datum to-next) ''to-next] [(~datum past-last) ''past-last]
+                      [(~datum no-skip) 'no-skip] [(~datum to-next) 'to-next] [(~datum past-last) 'past-last]
                       [((~and kind (~or* (~datum to-first) (~datum to-last))) x:id)
                        (unless (findf (λ (b) (eq? (pbinding-name b) (syntax-e #'x))) bindings)
                          (raise-syntax-error 'define-pattern "the skip target is not a binding of the pattern" stx #'x))
@@ -326,6 +326,23 @@
                                              "unknown skip strategy; expected no-skip, to-next, past-last, (to-first x), or (to-last x)"
                                              s)]))]
          [else #f]))
+     ;; #:timeout-partial (d clock): timed-out partial matches; #:retain (reason ...)
+     (define timeout
+       (cond [(hash-ref opts '#:timeout-partial #f)
+              => (λ (t) (syntax-parse t
+                          [(d:expr clk:id) #`(list d '#,(check-clock! #'clk '(event-time processing-time)))]
+                          [_ (raise-syntax-error 'define-pattern "expected (duration clock)" t)]))]
+             [else #f]))
+     (when (and timeout (not (hash-ref opts '#:where #f)))
+       (raise-syntax-error 'define-pattern "#:timeout-partial needs a #:where clause: its partial matches are those it has not accepted" stx))
+     (define retain
+       (cond [(hash-ref opts '#:retain #f)
+              => (λ (r) (syntax-parse r
+                          [(x:id ...) (for ([x (syntax->list #'(x ...))])
+                                        (unless (memq (syntax-e x) '(match timeout))
+                                          (raise-syntax-error 'define-pattern "unknown output reason; expected match or timeout" r x)))
+                                      #''(x ...)]))]
+             [else #f]))
      (define heads (pattern-heads body))
      (define non-monotone? (ormap (λ (h) (memq h '(absent unless aperiodic aperiodic* periodic periodic*))) heads))
      (when (and (eq? (hash-ref policies 'eval #f) 'immediate)
@@ -377,7 +394,9 @@
                    [input input]
                    [derive derive]
                    [policies #`(hasheq #,@(append* (for/list ([(k v) (in-hash policies)]) (list #`'#,k #`'#,v)))
-                                       #,@(if skip (list #''skip #`'#,skip) '()))]
+                                       #,@(if skip (list #''skip #`'#,skip) '())
+                                       #,@(if timeout (list #''timeout-partial timeout) '())
+                                       #,@(if retain (list #''retain retain) '()))]
                    [engine engine]
                    [shape-datum (shape-types out-shape)])
        #'(begin

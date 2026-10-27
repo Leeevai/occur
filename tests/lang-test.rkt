@@ -339,3 +339,33 @@
                       (compile-warnings (string-append pat-header "(define-pattern p #:from feed (kleene+ (b : Swipe)))\n")))
   (check-equal? (compile-warnings (string-append pat-header "(define-pattern p #:from feed #:within 60 (kleene+ (b : Swipe)))\n"))
                 ""))
+
+(require (only-in "lang/policies.rkt" [occur-run policies-run]))
+
+(define (constituent-ids r node)
+  (map (λ (e) (sort (map event-id (event-constituents e)) string<?)) (by-node r node)))
+
+(spec-test '(SEL.next SEL.strict OUT.maximal CON.chronicle CON.recent OUT.first SKIP.past-last
+             OUT.timeout-partial CON.retain OUT.edge OUT.rate-limit OUT.coalesce)
+           "the policies of §12 through define-pattern and stream stages"
+  (define r (policies-run))
+  (check-equal? (constituent-ids r 'card-testing-next) '(("e1" "e2" "e4")))
+  (check-equal? (constituent-ids r 'card-testing-strict) '(("e1" "e2")))
+  (check-equal? (constituent-ids r 'paired) '(("a1" "b1") ("a2" "b2")))
+  (check-equal? (constituent-ids r 'latest) '(("a2" "b1") ("a2" "b2")))
+  (check-equal? (constituent-ids r 'firsts) '(("a1" "b1") ("a2" "b1")))
+  (check-equal? (constituent-ids r 'skipping) '(("a1" "a2" "b1")))
+  ;; the flush reports {x0, x1} at 10 and keeps them; x2 completes the three at 40
+  (check-equal? (for/list ([o (run-result-outputs r)] #:when (eq? (output-node o) 'three))
+                  (list (output-at o) (sort (map event-id (event-constituents (output-item o))) string<?)
+                        (event-attr/default (output-item o) 'reason #f)))
+                '((10 ("x0" "x1") timeout) (40 ("x0" "x1" "x2") #f)))
+  (check-equal? (map (λ (e) (event-attr e 'state)) (by-node r 'transitions)) '("silent" "live" "silent"))
+  (check-equal? (map event-ts (by-node r 'capped)) '(1 3))
+  (check-equal? (length (by-node r 'together)) 4))
+
+(spec-test 'OUT.timeout-partial "a timed-out partial needs a where clause; retain names known reasons"
+  (check-compile-error (string-append pat-header "(define-pattern p #:from feed #:within 60\n #:timeout-partial (10 processing-time) (kleene+ (b : Swipe)))\n")
+                       #rx"needs a #:where clause" 5)
+  (check-compile-error (string-append pat-header "(define-pattern p #:from feed #:within 60 #:retain\n (late) (kleene+ (b : Swipe)) #:where (> (count b) 1))\n")
+                       #rx"unknown output reason" 6))

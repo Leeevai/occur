@@ -18,6 +18,7 @@
                        "../private/context.rkt"
                        "../private/aggregate.rkt"
                        "../private/join.rkt"
+                       "../private/ops/output.rkt"
                        "../private/dataflow.rkt"
                        "../private/operator.rkt"
                        "../private/ops/stateless.rkt"
@@ -844,3 +845,41 @@
                                   #:valid-from #,(if (attribute vf) (event-lambda rshape #'vf) #'event-ts))]))
       (stage-out* op (list (stage-ctx-prev ctx) right-input)
                   (shape (list (cons type out-fields))) key-fn)])))
+
+;; ===========================================================================
+;; Output policies on streams (spec §12.3)
+
+;; (coalesce maybe-sum): outputs of one key due at one instant become one.  OUT.coalesce
+(register-stage!
+ 'coalesce
+ (λ (stx ctx)
+   (syntax-parse stx
+     [(_ (~optional (~seq #:sum (a:id ...))))
+      (stage-out* #`(coalesce-operator #:key #,(or (stage-ctx-key ctx) #'#f)
+                                       #:sum '#,(if (attribute a) #'(a ...) #'()))
+                  #f (shape-with-fields (stage-ctx-shape ctx) '((merged . Integer))) (stage-ctx-key ctx))])))
+
+;; (rate-limit d #:mode drop|defer): one output per d of processing time.   OUT.rate-limit
+(register-stage!
+ 'rate-limit
+ (λ (stx ctx)
+   (syntax-parse stx
+     [(_ d:expr (~optional (~seq #:mode (~and m (~or* (~datum drop) (~datum defer))))))
+      (stage-out* #`(rate-limit-operator d #:mode '#,(if (attribute m) (syntax-e #'m) 'defer)
+                                         #:key #,(or (stage-ctx-key ctx) #'#f))
+                  #f (stage-ctx-shape ctx) (stage-ctx-key ctx))])))
+
+;; (edge #:enter expr maybe-leave maybe-report): only transitions.          OUT.edge
+(register-stage!
+ 'edge
+ (λ (stx ctx)
+   (define shp (stage-ctx-shape ctx))
+   (syntax-parse stx
+     [(_ (~alt (~once (~seq #:enter en:expr)) (~optional (~seq #:leave lv:expr))
+               (~optional (~seq #:report-leave rl:boolean)))
+         ...)
+      (stage-out* #`(edge-operator #:enter? #,(event-lambda shp #'en)
+                                   #:leave? #,(if (attribute lv) (event-lambda shp #'lv) #'(λ (e) #f))
+                                   #:report-leave? #,(if (attribute rl) #'rl #'#t)
+                                   #:key #,(or (stage-ctx-key ctx) #'#f))
+                  #f shp (stage-ctx-key ctx))])))
