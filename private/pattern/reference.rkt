@@ -251,13 +251,17 @@
    (define eps (struct-copy pmatch empty-match [bindings (for/hasheq ([n names]) (values n '()))]))
    (define lo (p:repeat-min p))
    (define limit (min (p:repeat-max p) (length (oracle-ctx-history ctx))))
-   (let loop ([k 1] [level one] [acc (if (zero? lo) (list eps) '())])
-     (define acc2 (if (and (>= k lo) (<= k limit)) (append acc level) acc))
+   ;; a level holds (chain . its last copy): each copy follows the copy
+   ;; before it, which is the predecessor the selection strategies read
+   (let loop ([k 1] [level (map (λ (m) (cons m m)) one)] [acc (if (zero? lo) (list eps) '())])
+     (define acc2 (if (and (>= k lo) (<= k limit)) (append acc (map car level)) acc))
      (if (or (>= k limit) (null? level))
          acc2
          (loop (add1 k)
-               (dedupe (for*/list ([a (in-list level)] [b (in-list one)] #:when (< (pmatch-te a) (pmatch-ts b)))
-                         (pmatch-union ctx a b #:pred (pred-of ctx a))))
+               (remove-duplicates
+                (for*/list ([a (in-list level)] [b (in-list one)] #:when (< (pmatch-te (car a)) (pmatch-ts b)))
+                  (cons (pmatch-union ctx (car a) b #:pred (pred-of ctx (cdr a))) b))
+                #:key (λ (x) (pmatch-key (car x))))
                acc2)))))
 
 ;; ===========================================================================
