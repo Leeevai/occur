@@ -144,11 +144,11 @@ Status values: `todo`, `partial`, `done`.
 | `SEL.next` | §12 | | | | | todo |
 | `SEL.strict` | §12 | | | | | todo |
 | `SEL.partition` | §12 | | | | | todo |
-| `SEL.any` | §12 | | | | | todo |
+| `SEL.any` | §12 | `#:selection any` (default) | the engine's delta joins (private/pattern/nfa.rkt) | tests/nfa-test.rkt, tests/pattern-operator-test.rkt |  | partial |
 | `CON.cumulative` | §12 | | | | | todo |
 | `CON.retain` | §12 | | | | | todo |
 | `CON.recent` | §12 | | | | | todo |
-| `CON.unrestricted` | §12 | | | | | todo |
+| `CON.unrestricted` | §12 | `#:consumption unrestricted` (default) | the engine reports every match (private/pattern/nfa.rkt) | tests/nfa-test.rkt |  | partial |
 | `CON.chronicle` | §12 | | | | | todo |
 | `CON.continuous` | §12 | | | | | todo |
 | `OUT.rate-limit` | §12 | | | | | todo |
@@ -156,7 +156,7 @@ Status values: `todo`, `partial`, `done`.
 | `OUT.first` | §12 | | | | | todo |
 | `OUT.timeout-partial` | §12 | | | | | todo |
 | `OUT.edge` | §12 | | | | | todo |
-| `OUT.every` | §12 | | | | | todo |
+| `OUT.every` | §12 | `#:output every` (default) | the engine reports every match (private/pattern/nfa.rkt) | tests/nfa-test.rkt |  | partial |
 | `OUT.last` | §12 | | | | | todo |
 | `OUT.maximal` | §12 | | | | | todo |
 | `SKIP.no-skip` | §12 | | | | | todo |
@@ -165,7 +165,7 @@ Status values: `todo`, `partial`, `done`.
 | `SKIP.to-first` | §12 | | | | | todo |
 | `SKIP.to-last` | §12 | | | | | todo |
 | `EVAL.immediate` | §12 | | | | | todo |
-| `EVAL.deferred` | §12 | | | | | todo |
+| `EVAL.deferred` | §12 | default for non-monotone patterns; `#:eval deferred` | deferred decisions at the watermark in the engine (private/pattern/nfa.rkt) | tests/nfa-test.rkt |  | partial |
 | `DR.summary` | §13 | | | | | todo |
 | `DR.view` | §13 | | | | | todo |
 | `DR.output-identity` | §13 | | | | | todo |
