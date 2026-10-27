@@ -10,6 +10,12 @@
 ;; a running total per device, exported every minute
 (define-view totals #:from readings #:init 0 #:update (+ state v) #:export-every 60)
 
+;; health by arrival age and data age, exported every minute
+(define-view health #:from readings #:init #f #:update state
+  #:project (classify-health #:now now #:last-arrival last-arrival #:newest newest
+                             #:live 30 #:silent 120 #:stale 60)
+  #:export-every 60)
+
 ;; derived events re-enter: pairs, then a stream over the pairs (DR.closure)
 (define-pattern pairs #:from readings #:within 100 (seq (a : Reading) (b : Reading))
   #:emit (Pair [dev a.dev]))

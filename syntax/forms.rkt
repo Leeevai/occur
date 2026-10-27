@@ -428,15 +428,20 @@
            (registry-add-node! occur-registry rt)))]))
 
 ;; ---------------------------------------------------------------------------
-;; (define-view name #:from stream maybe-key #:init expr #:update expr maybe-export)   DR.view
-;; #:update sees `state`, `now`, `it`, and the event's attributes. The view is
-;; queried with (view-ref result 'name key) and, with #:export-every d,
-;; emits a View event per key every d of processing time.
+;; (define-view name #:from stream maybe-key #:init expr #:update expr
+;;              maybe-project maybe-export)                              DR.view
+;; #:update sees `state`, `now`, `it`, and the event's attributes. With
+;; #:project expr, what is exported is expr, which sees `state`, `now`,
+;; `last-arrival` (the processing time of the key's last event), and
+;; `newest` (its newest end time), as a health classification needs. The
+;; view is queried with (view-ref result 'name key) and, with
+;; #:export-every d, emits a View event per key every d of processing time.
 
 (define-syntax (define-view stx)
   (syntax-parse stx
     [(_ name:id (~alt (~once (~seq #:from up:id)) (~optional (~seq #:key k:id))
                       (~once (~seq #:init init:expr)) (~once (~seq #:update upd:expr))
+                      (~optional (~seq #:project proj:expr))
                       (~optional (~seq #:export-every d:expr)))
         ...)
      (define v (lookup-upstream #'up))
@@ -449,11 +454,16 @@
      (with-syntax ([rt (format-id #'name "~a-view" #'name)]
                    [update (let ([st (datum->syntax #'upd 'state)] [now (datum->syntax #'upd 'now)])
                              #`(λ (#,st e #,now) (#,(event-lambda shp #'upd) e)))]
+                   [project (if (attribute proj)
+                                (with-syntax ([(st nw la nwst) (for/list ([x '(state now last-arrival newest)])
+                                                                 (datum->syntax #'proj x))])
+                                  #'(λ (st nw la nwst) proj))
+                                #'(λ (s now arrival newest) s))]
                    [key key] [input input]
                    [export (or (attribute d) #'#f)])
        #'(begin
            (define rt (make-node 'name (view-operator #:key key #:init (λ () init) #:update update
-                                                      #:export-every export)
+                                                      #:project project #:export-every export)
                                  (list input) #:sink? #t))
            (define-syntax name (make-stream-static 'name (shape '((View (key . Any) (view . Any))))
                                                    (quote-syntax rt) #:key (quote-syntax key)))

@@ -387,6 +387,10 @@
                      (filter (λ (o) (eq? (output-node o) 'totals)) (run-result-outputs r)))
                 '((60 "d1" 3) (60 "d2" 5)))           ; the script ends at 75, before the next export
   (check-equal? (view-ref r 'totals "d1") 6)
+  ;; at 60, d1 last arrived at 20 (quiet) and d2 at 30 with data from 30 (live)
+  (check-equal? (map (λ (o) (list (output-at o) (event-attr (output-item o) 'key) (event-attr (output-item o) 'view)))
+                     (filter (λ (o) (eq? (output-node o) 'health)) (run-result-outputs r)))
+                '((60 "d1" quiet) (60 "d2" live)))
   (check-equal? (map (λ (e) (event-level e)) (by-node r 'pair-windows)) '(2))
   (check-equal? (map event-constituents (by-node r 'compact)) '(() () ()))   ; three pairs
   (check-equal? (map event-id (by-node r 'once)) '("x1" "x2"))   ; the redelivery has the same content
