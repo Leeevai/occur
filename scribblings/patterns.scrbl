@@ -78,9 +78,26 @@ Spec §11.4. These predicates and constructors are available in
 @racket[window-close-operator] (@tt{PT.window-close}), and calendar windows
 (@tt{PT.schedule}).
 
+@section{The incremental engine}
+
+Patterns run on an incremental engine (@filepath{private/pattern/nfa.rkt}):
+a tree of match automata, one per pattern node, each keeping buffers of the
+sub-matches it has seen and returning only new matches as events arrive.
+Negation, absence, span absence, and the aperiodic and periodic forms are
+not monotone (@tt{ES.operator}): they hold candidates until the watermark
+guarantees the answer (@tt{EVAL.deferred}). A hybrid-clock absence decides
+on the processing clock, which is how a total silence is seen
+(@tt{TM.idle}). Property tests check the engine against the oracle on
+random patterns and histories. @racket[#:engine reference] runs the oracle
+instead.
+
 @section{Runtime}
 
 @defproc[(denote [p pat?] [history (listof event?)] [#:activation t0 (or/c #f time?) #f]
                  [#:horizon h (or/c #f time?) #f])
          (listof pmatch?)]{The reference oracle: ⟦P⟧(H) by enumeration.}
 @defproc[(derive-match [m pmatch?] [#:type type symbol? 'Match]) event?]{@tt{DR.derive}.}
+@defproc[(make-engine [p pat?] [#:activation t0 (or/c #f time?) #f] [#:selection s symbol? 'any]) engine?]{}
+@defproc[(engine-event [e engine?] [ev event?] [index exact-nonnegative-integer?])
+         (values engine? (listof pmatch?))]{}
+@defproc[(engine-advance [e engine?] [W time?] [now time?]) (values engine? (listof pmatch?))]{}
