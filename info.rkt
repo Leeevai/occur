@@ -15,3 +15,5 @@
                      "rackcheck-lib"
                      "scribble-lib"
                      "racket-doc"))
+
+(define scribblings '(("scribblings/occur.scrbl" (multi-page) (language))))
