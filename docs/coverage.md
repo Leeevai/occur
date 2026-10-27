@@ -11,20 +11,20 @@ Status values: `todo`, `partial`, `done`.
 
 | ID | § | Surface form | Runtime function | Tests | Example | Status |
 |---|---|---|---|---|---|---|
-| `ES.time` | §2 | | | | | todo |
-| `ES.type` | §2 | | | | | todo |
-| `ES.event` | §2 | | | | | todo |
-| `ES.batch` | §2 | | | | | todo |
-| `ES.reference` | §2 | | | | | todo |
-| `ES.composite` | §2 | | | | | todo |
-| `ES.space` | §2 | | | | | todo |
-| `ES.precedes` | §2 | | | | | todo |
-| `ES.membership` | §2 | | | | | todo |
-| `ES.causality` | §2 | | | | | todo |
-| `ES.stream` | §2 | | | | | todo |
-| `ES.history` | §2 | | | | | todo |
-| `ES.keyed` | §2 | | | | | todo |
-| `ES.substream` | §2 | | | | | todo |
+| `ES.time` | §2 | (M2) durations: `seconds` `minutes` `hours` | `time?` `interval` `utc` (private/time.rkt) | tests/time-test.rkt |  | partial |
+| `ES.type` | §2 | (M2) `event-type` | `make-event-type` `payload-problem` (private/event.rkt) | tests/event-test.rkt |  | partial |
+| `ES.event` | §2 | (M2) `source` data | `make-event` `event-attr` (private/event.rkt) | tests/event-test.rkt |  | partial |
+| `ES.batch` | §2 | (M2) `#:n` in source data | `make-batch-event` `batch-share` (private/event.rkt) | tests/batch-test.rkt |  | partial |
+| `ES.reference` | §2 | (M2) | `make-reference-event` `store-read` (private/event.rkt) | tests/reference-test.rkt |  | partial |
+| `ES.composite` | §2 | (M10) `#:emit` | `make-composite` (private/event.rkt) | tests/composite-test.rkt |  | partial |
+| `ES.space` | §2 | (M2) compile-time schema checks | `event-space-member?` `event-level` (private/event.rkt) | tests/space-test.rkt |  | partial |
+| `ES.precedes` | §2 | (M9) `(precedes a b)` in `#:where` | `precedes?` (private/relations.rkt) | tests/relations-test.rkt |  | partial |
+| `ES.membership` | §2 | (M13) | `constituent-of?` `provenance` `member*?` (private/relations.rkt) | tests/relations-test.rkt |  | partial |
+| `ES.causality` | §2 | (M13) | `causality-from-events` `causes?` (private/relations.rkt) | tests/relations-test.rkt |  | partial |
+| `ES.stream` | §2 | (M2) `source` | `make-event-stream` (private/stream.rkt) | tests/stream-test.rkt |  | partial |
+| `ES.history` | §2 | (M2) | `history` (private/stream.rkt) | tests/stream-test.rkt |  | partial |
+| `ES.keyed` | §2 | (M4) `(key-by attr)` | `partition-stream` (private/stream.rkt) | tests/stream-test.rkt |  | partial |
+| `ES.substream` | §2 | (M4) `#:key` `#:substream` `#:kind` | `attribute-keying` `watching` (private/stream.rkt) | tests/stream-test.rkt |  | partial |
 | `ES.operator` | §2 | | | | | todo |
 | `OP.filter` | §4 | | | | | todo |
 | `OP.project` | §4 | | | | | todo |
