@@ -49,3 +49,8 @@
   (define r2 (run (ex:occur-program) steps #:final-watermark? #f))
   (for ([node '(strict-maximal partition-maximal next-maximal any-maximal)])
     (check-equal? (map output-at (outputs-of r2 node)) (list (minutes 12)) (format "~a" node))))
+
+(spec-test '(PT.negation PT.span-absence SEL.any OUT.every)
+           "trace A′ (§15): ¬Verified scopes the gap before the first b; unless Verified scopes the span"
+  (check-equal? (matches r 'gap-negation) '(("e1" "e2") ("e1" "e2" "e4")))
+  (check-equal? (matches r 'span-negation) '(("e1" "e2"))))
