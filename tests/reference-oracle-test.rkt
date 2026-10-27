@@ -43,3 +43,10 @@
   (define m (car (denote (seq A B) H)))
   (check-equal? (list (pmatch-ts m) (pmatch-te m)) '(1 2))
   (check-equal? (sort (hash-keys (pmatch-bindings m)) symbol<?) '(a b)))
+
+(spec-test 'PT.conjunction "⟦P₁ ∧ P₂⟧ unions disjoint matches in any order"
+  (check-equal? (id-set (denote (conj A B) H)) (set-of '("a1" "b1") '("b1" "a2") '("a1" "b2") '("a2" "b2")))
+  ;; the same type on both sides pairs distinct events, bound either way round
+  (define both (denote (conj A (prim 'A #:bind 'x)) H))
+  (check-equal? (ids both) '(("a1" "a2") ("a1" "a2")))
+  (check-equal? (sort (map (λ (m) (event-id (hash-ref (pmatch-bindings m) 'a))) both) string<?) '("a1" "a2")))

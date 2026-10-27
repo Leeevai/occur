@@ -155,3 +155,14 @@
    (define R (denote (p:seq-right p)))
    (for*/list ([m1 (in-list L)] [m2 (in-list R)] #:when (< (pmatch-te m1) (pmatch-ts m2)))
      (pmatch-union ctx m1 m2 #:pred (pred-of ctx m1)))))
+
+;; ===========================================================================
+;; PT.conjunction: ⟦P₁ ∧ P₂⟧ = { m₁ ∪ m₂ : m₁ ∩ m₂ = ∅ }, in any order.
+
+(register!
+ p:and?
+ (λ (ctx p denote)
+   (define L (denote (p:and-left p)))
+   (define R (denote (p:and-right p)))
+   (for*/list ([m1 (in-list L)] [m2 (in-list R)] #:when (disjoint? m1 m2))
+     (pmatch-union ctx m1 m2))))
