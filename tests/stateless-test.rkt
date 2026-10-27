@@ -28,3 +28,15 @@
   (define d (derive-from e 'R2 '((w . 2)) #:src 'test))
   (check-equal? (map event-id (event-constituents d)) '("r"))
   (check-equal? (list (event-ts d) (event-te d) (event-n d) (event-src d)) '(2 5 4 test)))
+
+(spec-test 'OP.project "π_A keeps only the attributes A and records C = {e}"
+  (define e (make-event 'Swipe '((card . "c1") (amount . 5) (merchant . "m")) #:id "s" #:ts 1 #:te 2 #:n 3))
+  (define out (run1 (project-operator '(card amount)) (list e)))
+  (check-equal? (length out) 1)
+  (define p (car out))
+  (check-equal? (event-payload p) (hasheq 'card "c1" 'amount 5))
+  (check-equal? (event-type p) 'Swipe)
+  (check-equal? (map event-id (event-constituents p)) '("s"))
+  (check-equal? (list (event-ts p) (event-te p) (event-n p)) '(1 2 3))
+  (check-equal? (event-type (car (run1 (project-operator '(card) #:type 'CardOnly) (list e)))) 'CardOnly)
+  (check-exn #rx"no such attribute" (λ () (run1 (project-operator '(zip)) (list e)))))

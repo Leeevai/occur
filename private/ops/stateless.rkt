@@ -34,3 +34,22 @@
   [derive-from (->* (event? symbol? (or/c hash? (listof pair?)) #:src any/c)
                     (#:ts time? #:te time? #:n exact-nonnegative-integer?)
                     event?)]))
+
+;; ---------------------------------------------------------------------------
+;; OP.project: π_A restricts the payload to the attributes A ⊆ schema(τ),
+;; giving the type τ restricted to A (named #:type, or τ itself).
+
+(define (project-operator attrs #:type [type #f])
+  (stateless-operator
+   'project
+   (λ (e c)
+     (for ([a (in-list attrs)])
+       (unless (event-has-attr? e a)
+         (raise-arguments-error 'project "the event has no such attribute" "attribute" a "event" e)))
+     (emit! c (derive-from e (or type (event-type e))
+                           (for/hasheq ([a (in-list attrs)]) (values a (event-attr e a)))
+                           #:src 'project)))))
+
+(provide
+ (contract-out
+  [project-operator (->* ((listof symbol?)) (#:type (or/c #f symbol?)) operator?)]))
