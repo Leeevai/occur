@@ -10,7 +10,7 @@ This file is the resume point for work on occur. Read it, together with
 | M1 | Event space | §2 | done (runtime; surface forms follow in M2) |
 | M2 | `#lang occur` skeleton and scripted runner | §2, §6 | done |
 | M3 | Single-event operations | §4 | done |
-| M4 | Stream structure, including high-water-mark merging | §5 | todo |
+| M4 | Stream structure, including high-water-mark merging | §5 | done |
 | M5 | Time and progress | §6 | todo |
 | M6 | Windows and contexts | §7 | todo |
 | M7 | Aggregation | §8 | todo |
@@ -29,10 +29,11 @@ This file is the resume point for work on occur. Read it, together with
 
 ## Next step
 
-M4: stream structure (`ST.merge`, `ST.key-by`, `ST.dedupe`,
-`ST.monotonic-merge`, `ST.reorder`, `ST.throttle`) in
-`private/ops/structure.rkt`, with stages and the source options `#:key`,
-`#:substream`, `#:kind`, and `#:merge high-water-mark`.
+M5: time and progress in `private/progress.rkt` and `private/scheduler.rkt`:
+event/processing/hybrid clocks, global and keyed watermarks
+(`W^any`/`W^all`), idleness, the future-skew guard, lateness policies,
+timers, five-field UTC cron schedules with coalesced missed ticks, and
+retraction, each with a surface form.
 
 Notes:
 - Hosted CI runs are blocked by the account's GitHub billing; every commit
