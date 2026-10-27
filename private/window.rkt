@@ -18,18 +18,21 @@
 
 ;; ===========================================================================
 ;; Accumulators: init -> s, add : s e -> s, result : s -> payload hash, and
-;; optionally remove : s e -> s (for invertible aggregates, AG.incremental).
+;; optionally remove : s e -> s (for invertible aggregates) and combine :
+;; s s -> s (for associative ones), which incremental sliding windows use
+;; (AG.incremental).
 
-(struct accumulator (init add result remove) #:transparent)
+(struct accumulator (init add result remove combine) #:transparent)
 
-(define (make-accumulator #:init init #:add add #:result result #:remove [remove #f])
-  (accumulator init add result remove))
+(define (make-accumulator #:init init #:add add #:result result #:remove [remove #f] #:combine [combine #f])
+  (accumulator init add result remove combine))
 
 ;; The default window accumulator: the multiplicity sum and the event count.
 (define contents-accumulator
   (make-accumulator #:init (λ () (cons 0 0))
                     #:add (λ (s e) (cons (+ (car s) (event-n e)) (add1 (cdr s))))
                     #:remove (λ (s e) (cons (- (car s) (event-n e)) (sub1 (cdr s))))
+                    #:combine (λ (a b) (cons (+ (car a) (car b)) (+ (cdr a) (cdr b))))
                     #:result (λ (s) (hasheq 'count (car s) 'events (cdr s)))))
 
 ;; ===========================================================================
@@ -184,9 +187,10 @@
 
 (provide
  (contract-out
-  [struct accumulator ([init procedure?] [add procedure?] [result procedure?] [remove (or/c #f procedure?)])]
+  [struct accumulator ([init procedure?] [add procedure?] [result procedure?] [remove (or/c #f procedure?)]
+                        [combine (or/c #f procedure?)])]
   [make-accumulator (->* (#:init (-> any/c) #:add (-> any/c event? any/c) #:result (-> any/c hash?))
-                         (#:remove (or/c #f (-> any/c event? any/c)))
+                         (#:remove (or/c #f (-> any/c event? any/c)) #:combine (or/c #f (-> any/c any/c any/c)))
                          accumulator?)]
   [contents-accumulator accumulator?]
   [window-output (->* (symbol? any/c time? time? accumulator? any/c (listof event?))
@@ -271,38 +275,85 @@
 ;; ===========================================================================
 ;; WN.count: the last n events, advancing every m events. A window is emitted
 ;; every m-th event once n events have been seen, with ts and te the minimum
-;; and maximum over its contents. Invertible accumulators are maintained
-;; incrementally (AG.incremental); others are refolded.
+;; and maximum over its contents.
+;;
+;; AG.incremental: an invertible accumulator is maintained with add and
+;; remove as events enter and leave the window. An associative one (with
+;; combine but no remove, such as min and max) uses a two-stack queue, which
+;; answers the window's aggregate in amortized constant time. Any other
+;; accumulator is refolded over the window.
+
+;; The two-stack queue: elements are pushed on the back stack, which keeps
+;; their running aggregate; popping takes from the front stack, whose
+;; entries hold the aggregate of themselves and everything behind them,
+;; refilled from the back when empty.
+(struct two-stack (front back back-agg) #:transparent)   ; front: list of (elt . agg); back: list of elt
+
+(define (two-stack-empty) (two-stack '() '() #f))
+(define (two-stack-push q x lift combine)
+  (two-stack (two-stack-front q) (cons x (two-stack-back q))
+             (if (two-stack-back-agg q) (combine (two-stack-back-agg q) (lift x)) (lift x))))
+(define (two-stack-pop q lift combine)
+  (define front
+    (if (null? (two-stack-front q))
+        ;; move the back stack over, oldest on top, with suffix aggregates
+        (for/fold ([acc '()]) ([x (in-list (two-stack-back q))])
+          (cons (cons x (if (null? acc) (lift x) (combine (lift x) (cdr (car acc))))) acc))
+        (two-stack-front q)))
+  (if (null? (two-stack-front q))
+      (two-stack (cdr front) '() #f)
+      (two-stack (cdr front) (two-stack-back q) (two-stack-back-agg q))))
+(define (two-stack-aggregate q combine)
+  (define f (and (pair? (two-stack-front q)) (cdr (car (two-stack-front q)))))
+  (define b (two-stack-back-agg q))
+  (cond [(and f b) (combine f b)] [f f] [else b]))
 
 (struct count-state (queue size seen acc) #:transparent)   ; queue: newest first
 
 (define (count-window-operator n m acc #:key [key #f] #:type [type 'Window])
   (define remove (accumulator-remove acc))
+  (define combine (accumulator-combine acc))
+  (define (lift e) ((accumulator-add acc) ((accumulator-init acc)) e))
+  (define mode (cond [remove 'invertible] [combine 'two-stack] [else 'refold]))
   (make-operator
    'count-window
    #:key key
-   #:init-key (λ (gl k c) (count-state '() 0 0 ((accumulator-init acc))))
+   #:init-key (λ (gl k c) (count-state '() 0 0 (case mode
+                                                 [(invertible) ((accumulator-init acc))]
+                                                 [(two-stack) (two-stack-empty)]
+                                                 [else #f])))
    #:on-event
    (λ (gl st e c)
      (define q0 (cons e (count-state-queue st)))
      (define evicted (if (> (length q0) n) (last q0) #f))
      (define q (if evicted (take q0 n) q0))
      (define seen (add1 (count-state-seen st)))
-     (define a (cond [(and remove evicted) (remove ((accumulator-add acc) (count-state-acc st) e) evicted)]
-                     [remove ((accumulator-add acc) (count-state-acc st) e)]
-                     [else #f]))
+     (define a
+       (case mode
+         [(invertible) (let ([a1 ((accumulator-add acc) (count-state-acc st) e)])
+                         (if evicted (remove a1 evicted) a1))]
+         [(two-stack) (let ([q1 (two-stack-push (count-state-acc st) e lift combine)])
+                        (if evicted (two-stack-pop q1 lift combine) q1))]
+         [else #f]))
      (when (and (= (length q) n) (zero? (modulo seen m)))
        (define contents (reverse q))
-       (define st-acc (or a (for/fold ([s ((accumulator-init acc))]) ([x contents]) ((accumulator-add acc) s x))))
+       (define st-acc (case mode
+                        [(invertible) a]
+                        [(two-stack) (two-stack-aggregate a combine)]
+                        [else (for/fold ([s ((accumulator-init acc))]) ([x contents]) ((accumulator-add acc) s x))]))
        (emit! c (window-output type (ctx-key c) (apply time-min (map event-ts contents))
                                (apply time-max (map event-te contents)) acc st-acc contents)))
-     (count-state q (length q) seen (or a (count-state-acc st))))))
+     (count-state q (length q) seen a))))
 
 (provide
  (contract-out
   [count-window-operator (->* (exact-positive-integer? exact-positive-integer? accumulator?)
                               (#:key (or/c #f (-> event? any/c)) #:type symbol?)
-                              operator?)]))
+                              operator?)]
+  [two-stack-empty (-> two-stack?)]
+  [two-stack-push (-> two-stack? any/c procedure? procedure? two-stack?)]
+  [two-stack-pop (-> two-stack? procedure? procedure? two-stack?)]
+  [two-stack-aggregate (-> two-stack? procedure? any/c)]))
 
 ;; ===========================================================================
 ;; WN.landmark: [t0, now), growing forever. After every event at or after

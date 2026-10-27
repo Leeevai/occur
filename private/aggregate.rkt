@@ -288,3 +288,45 @@
                              aggregator?)]
   [count-min-agg (->* ((-> event? any/c)) (#:width exact-positive-integer? #:depth exact-positive-integer?)
                       aggregator?)]))
+
+;; ===========================================================================
+;; Named aggregates as a window accumulator. The accumulator is invertible
+;; when every aggregator is, and associative when every one combines, so
+;; windows maintain it incrementally (AG.incremental).
+
+(define (aggregate-accumulator named)
+  (define aggs (map cdr named))
+  (define names (map car named))
+  (make-accumulator
+   #:init (λ () (for/list ([a (in-list aggs)]) ((aggregator-init a))))
+   #:add (λ (ss e) (for/list ([a (in-list aggs)] [s (in-list ss)]) ((aggregator-add a) s e)))
+   #:remove (and (andmap aggregator-remove aggs)
+                 (λ (ss e) (for/list ([a (in-list aggs)] [s (in-list ss)]) ((aggregator-remove a) s e))))
+   #:combine (and (andmap aggregator-combine aggs)
+                  (λ (xs ys) (for/list ([a (in-list aggs)] [x (in-list xs)] [y (in-list ys)])
+                               ((aggregator-combine a) x y))))
+   #:result (λ (ss) (for/hasheq ([n (in-list names)] [a (in-list aggs)] [s (in-list ss)])
+                      (values n ((aggregator-result a) s))))))
+
+;; A monotonic deque for the sliding maximum (or minimum) of a count window:
+;; it keeps the candidates (index . value) in decreasing order of value.
+(struct mono-deque (items better?) #:transparent)
+(define (make-mono-deque better?) (mono-deque '() better?))
+(define (mono-deque-push d i x)
+  (define better? (mono-deque-better? d))
+  (mono-deque (append (let loop ([l (reverse (mono-deque-items d))])
+                        (cond [(and (pair? l) (not (better? (cdr (car l)) x))) (loop (cdr l))]
+                              [else (reverse l)]))
+                      (list (cons i x)))
+              better?))
+(define (mono-deque-evict d before)   ; drop candidates with index < before
+  (mono-deque (dropf (mono-deque-items d) (λ (p) (< (car p) before))) (mono-deque-better? d)))
+(define (mono-deque-best d) (and (pair? (mono-deque-items d)) (cdr (car (mono-deque-items d)))))
+
+(provide
+ (contract-out
+  [aggregate-accumulator (-> (listof (cons/c symbol? aggregator?)) accumulator?)]
+  [make-mono-deque (-> (-> any/c any/c any/c) mono-deque?)]
+  [mono-deque-push (-> mono-deque? exact-integer? any/c mono-deque?)]
+  [mono-deque-evict (-> mono-deque? exact-integer? mono-deque?)]
+  [mono-deque-best (-> mono-deque? any/c)]))
