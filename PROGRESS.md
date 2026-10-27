@@ -18,7 +18,7 @@ This file is the resume point for work on occur. Read it, together with
 | M9 | Allen relations | §10 | done |
 | M10 | Pattern AST and reference oracle | §11 | done (PT.flush follows with M12) |
 | M11 | Incremental pattern engine, deadline scheduler, differential tests | §11, §17 | done |
-| M12 | Selection, consumption, output, skip, and evaluation policies | §12 | todo |
+| M12 | Selection, consumption, output, skip, and evaluation policies | §12 | done |
 | M13 | Derivation | §13 | todo |
 | M14 | Rules as data | §14 | todo |
 | M15 | Checkpoint, restore, and replay | §6 | todo |
@@ -29,12 +29,13 @@ This file is the resume point for work on occur. Read it, together with
 
 ## Next step
 
-M12: the policies of §12 in `private/pattern/policies.rkt`: selection
-checks (strict, partition, next) registered with the engine and as an
-oracle filter, with the nesting property strict ⊆ partition ⊆ next ⊆ any;
-consumption (recent, chronicle, continuous, cumulative, retain); output
-(first, last, maximal, timeout-partial, edge, rate-limit, coalesce); skip
-strategies; immediate evaluation; PT.flush; then trace A's table of §15.
+M13: derivation (§13) in `private/derive.rkt`: summarized outputs
+(DR.summary), content-derived output identity and downstream
+deduplication (DR.output-identity), ordered delivery (DR.ordered),
+closure of derived events into other operators (DR.closure), the cycle
+guard in the surface (DR.cycle-guard, `#:recursive`), actions (DR.act),
+materialized views with health classification and scheduled export
+(DR.view), and retraction propagation (DR.retract).
 
 Notes:
 - Hosted CI runs are blocked by the account's GitHub billing; every commit
