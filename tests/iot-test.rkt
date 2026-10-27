@@ -97,3 +97,9 @@
                         (list (output-at o) (event-id (car (event-constituents (output-item o))))))
                       < #:key car)
                 (list (list (m 25) "pump-b@0") (list (m 51) "pump-b@30") (list (m 95) "pump-a@70") (list (m 95) "pump-b@60"))))
+
+(require (only-in "../examples/history.rkt" readings-by))
+
+(spec-test 'ES.history "the history of pump-a's readings at a given time"
+  (check-equal? (readings-by 10) '("pump-a@0" "pump-a@5" "pump-a@10"))
+  (check-equal? (length (readings-by 60)) 13))
