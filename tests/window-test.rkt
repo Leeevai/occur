@@ -142,3 +142,19 @@
                         (list (arrive 1 'in (pt "early" 50)) (arrive 2 'in (pt "a" 120)) (arrive 3 'in (pt "b" 160)))))
   (check-equal? (wins r) '((100 120 1) (100 160 2)))
   (check-equal? (run-result-counter r 'w 'before-landmark) 1))
+
+(define (shift kind t) (pt (format "~a~a" kind t) t `((kind . ,kind))))
+(define (kind? k) (λ (e) (eq? (event-attr/default e 'kind #f) k)))
+
+(spec-test 'WN.punctuated "a punctuated window spans from an opening event to a closing one or a timeout"
+  (define op (punctuated-window-operator (kind? 'start) (kind? 'end) contents-accumulator #:timeout 100))
+  (define r (run-window op (list (arrive 1 'in (shift 'start 10)) (arrive 2 'in (shift 'work 20))
+                                 (arrive 3 'in (shift 'work 30)) (arrive 4 'in (shift 'end 40))
+                                 (arrive 5 'in (shift 'work 50))
+                                 (arrive 6 'in (shift 'start 60)) (arrive 7 'in (shift 'work 70)))))
+  (check-equal? (map (λ (e) (list (event-ts e) (event-te e) (event-attr e 'count) (event-attr e 'reason)))
+                     (run-result-events r))
+                '((10 40 2 closed) (60 160 1 timeout)))
+  (check-equal? (map event-id (event-constituents (car (run-result-events r))))
+                '("start10" "work20" "work30" "end40"))
+  (check-equal? (run-result-counter r 'w 'outside) 1))

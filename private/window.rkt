@@ -320,3 +320,52 @@
  (contract-out
   [landmark-window-operator (->* (time? accumulator?) (#:key (or/c #f (-> event? any/c)) #:type symbol?)
                                  operator?)]))
+
+;; ===========================================================================
+;; WN.punctuated: a window opened by an event satisfying `open?` and closed by
+;; one satisfying `close?`, or by a timeout d after it opened (event time:
+;; when W reaches ts(A) + d; processing time: d after the opening arrived).
+;; The window's interval is [ts(A), te(B)] (or the deadline); the opening and
+;; closing events are constituents, and the accumulator sees the events in
+;; between. The output's `reason` is closed or timeout.
+
+(struct punct (start deadline acc inner opener) #:transparent)
+
+(define (punctuated-window-operator open? close? acc
+                                    #:key [key #f] #:timeout [timeout #f]
+                                    #:timeout-clock [tclock 'event-time] #:type [type 'Window])
+  (define (finish c p te reason closer)
+    (emit! c (window-output type (ctx-key c) (punct-start p) te acc (punct-acc p)
+                            (append (list (punct-opener p)) (reverse (punct-inner p)) (if closer (list closer) '()))
+                            #:extra (hasheq 'reason reason)))
+    #f)
+  (make-operator
+   'punctuated-window
+   #:monotone? #f
+   #:key key
+   #:init-key (λ (gl k c) #f)
+   #:on-event
+   (λ (gl p e c)
+     (cond
+       [(and (not p) (open? e))
+        (punct (event-ts e)
+               (and timeout (+ (if (eq? tclock 'processing-time) (ctx-now c) (event-ts e)) timeout))
+               ((accumulator-init acc)) '() e)]
+       [(not p) (count! c 'outside) p]
+       [(close? e) (finish c p (event-te e) 'closed e)]
+       [else (struct-copy punct p [acc ((accumulator-add acc) (punct-acc p) e)] [inner (cons e (punct-inner p))])]))
+   #:event-deadline (λ (p) (and (punct? p) (eq? tclock 'event-time) (punct-deadline p)))
+   #:deadline (λ (p) (and (punct? p) (eq? tclock 'processing-time) (punct-deadline p)))
+   #:on-timer
+   (λ (gl p c)
+     (define limit (if (eq? tclock 'processing-time) (ctx-now c) (ctx-watermark c)))
+     (if (and (punct? p) (punct-deadline p) (>= limit (punct-deadline p)))
+         (finish c p (punct-deadline p) 'timeout #f)
+         p))))
+
+(provide
+ (contract-out
+  [punctuated-window-operator (->* ((-> event? any/c) (-> event? any/c) accumulator?)
+                                   (#:key (or/c #f (-> event? any/c)) #:timeout (or/c #f duration?)
+                                    #:timeout-clock (or/c 'event-time 'processing-time) #:type symbol?)
+                                   operator?)]))
