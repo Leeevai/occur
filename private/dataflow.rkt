@@ -463,12 +463,21 @@
   (fire-processing-deadlines! r (runner-now r))
   (flush-outbox! r))
 
+;; Generators (operators of arity 0) start with the run: their unkeyed
+;; state is created at the start time and their deadlines armed.
+(define (start-generators! r)
+  (for ([name (in-list (program-order (runner-program r)))])
+    (when (zero? (operator-arity (node-op* r name)))
+      (key-callback! r name #f (λ (g s c) s))))
+  (flush-outbox! r))
+
 (define (run prog steps
              #:clock [clock (simulated-clock 0)]
              #:final-watermark? [final-watermark? #t]
              #:delivery [delivery 'by-key]
              #:track-provenance? [track-provenance? #t])
   (define r (make-runner prog (simulated-clock-start clock) delivery track-provenance?))
+  (start-generators! r)
   (for ([s (in-list steps)]) (run-step! r s))
   (when final-watermark?
     (for ([src (in-list (sort (hash-keys (program-sources prog)) symbol<?))])

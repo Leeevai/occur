@@ -192,3 +192,14 @@
   (check-true (event? (first items)))
   (check-true (retraction? (second items)))
   (check-equal? (event-id (retraction-event (second items))) (event-id (first items))))
+
+(test-case "generators of arity 0 start with the run and arm their deadlines"
+  (define gen (make-operator 'every-10 #:arity 0
+                             #:init-key (λ (g k c) (+ (ctx-now c) 10))
+                             #:deadline (λ (s) s)
+                             #:on-timer (λ (g s c)
+                                          (emit! c (make-event 'Tick '() #:at (ctx-now c)))
+                                          (+ s 10))))
+  (define n (make-node 'gen gen '() #:sink? #t))
+  (define r (run (make-program (list n)) (list (advance-to 35)) #:clock (simulated-clock 5)))
+  (check-equal? (ats r) '(15 25 35)))

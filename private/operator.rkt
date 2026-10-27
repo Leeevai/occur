@@ -15,6 +15,10 @@
 ;;   on-signal   : g s-or-#f signal ctx -> s-or-#f     optional, in-band lifecycle signals
 ;;   on-retract  : g s event ctx -> s                  optional, ⊖e arrived
 ;;
+;; An operator of arity 0 is a generator: it has no inputs, and the runner
+;; creates its (unkeyed) state when the run starts, so its deadlines arm
+;; from the start (calendar schedules are generators).
+;;
 ;; The runner partitions every operator by its key function, so each key's
 ;; state is isolated (ES.keyed) and operators are written for one partition.
 ;; Callbacks never mutate state; they return the new state and emit items
@@ -94,7 +98,7 @@
   [struct retraction ([event event?])]
   [struct signal ([kind symbol?] [key any/c] [time (or/c #f time?)] [data any/c])]
   [item? (-> any/c boolean?)]
-  [struct operator ([name symbol?] [arity exact-positive-integer?] [outputs exact-positive-integer?]
+  [struct operator ([name symbol?] [arity exact-nonnegative-integer?] [outputs exact-positive-integer?]
                     [monotone? boolean?] [key (or/c #f procedure?)] [lifecycle? boolean?]
                     [config? boolean?]
                     [init-global procedure?] [init-key procedure?] [on-event procedure?]
@@ -104,7 +108,7 @@
                     [judge (or/c #f procedure?)] [coalesce (or/c #f procedure?)]
                     [instance-of (or/c #f procedure?)])]
   [make-operator (->* (symbol?)
-                      (#:arity exact-positive-integer? #:outputs exact-positive-integer?
+                      (#:arity exact-nonnegative-integer? #:outputs exact-positive-integer?
                        #:monotone? boolean? #:key (or/c #f (-> event? any/c))
                        #:lifecycle? boolean? #:config? boolean?
                        #:init-global (-> any/c)
