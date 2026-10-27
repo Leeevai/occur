@@ -174,3 +174,23 @@
 (register!
  p:or?
  (λ (ctx p denote) (append (denote (p:or-left p)) (denote (p:or-right p)))))
+
+;; ===========================================================================
+;; PT.negation (negation between):
+;;   ⟦P₁ ; ¬Q ; P₂⟧ = { m₁ ∪ m₂ : te(m₁) < ts(m₂),
+;;                       no q ∈ ⟦Q⟧ with te(m₁) < ts(q) and te(q) < ts(m₂) }
+;; The forbidden region is the open gap between the neighbours; when P₂ is
+;; a Kleene closure the gap ends at its first repetition. Q is closed (it
+;; sees no outer bindings).
+
+(register!
+ p:neg-between?
+ (λ (ctx p denote)
+   (define L (denote (p:neg-between-left p)))
+   (define Q (denote (p:neg-between-neg p)))
+   (define R (denote (p:neg-between-right p)))
+   (for*/list ([m1 (in-list L)] [m2 (in-list R)]
+               #:when (< (pmatch-te m1) (pmatch-ts m2))
+               #:unless (for/or ([q (in-list Q)])
+                          (and (< (pmatch-te m1) (pmatch-ts q)) (< (pmatch-te q) (pmatch-ts m2)))))
+     (pmatch-union ctx m1 m2 #:pred (pred-of ctx m1)))))

@@ -55,3 +55,11 @@
   (define ms (denote (disj A C) H))
   (check-equal? (ids ms) '(("a1") ("a2") ("c1")))
   (check-false (hash-has-key? (pmatch-bindings (last ms)) 'a)))
+
+(spec-test 'PT.negation "the forbidden region of ¬Q is only the open gap between the neighbours"
+  (define V (prim 'V))
+  (define H2 (list (ev "a1" 'A 1) (ev "b1" 'B 2) (ev "v" 'V 3) (ev "b2" 'B 4)))
+  (check-equal? (ids (denote (neg-between A V B) H2)) '(("a1" "b1")))
+  ;; a Q at the gap's boundary does not block (the gap is open)
+  (check-equal? (ids (denote (neg-between A V B) (list (ev "a" 'A 1) (ev "v" 'V 1) (ev "b" 'B 2))))
+                '(("a" "b"))))
