@@ -112,3 +112,11 @@
 (spec-test 'PT.within "⟦P within Δ⟧ bounds the span of a match"
   (check-equal? (ids (denote (within (seq A B) 1) H)) '(("a1" "b1") ("a2" "b2")))
   (check-equal? (ids (denote (within (seq A B) 3) H)) '(("a1" "b1") ("a1" "b2") ("a2" "b2"))))
+
+(spec-test 'PT.where "θ filters matches by their bindings, including Kleene lists"
+  (define Hv (list (ev "a" 'A 1 '((card . "c1"))) (ev "b" 'B 2 '((card . "c1") (amount . 600)))
+                   (ev "b'" 'B 3 '((card . "c2") (amount . 900)))))
+  (define same-card (λ (bs) (equal? (event-attr (hash-ref bs 'a) 'card) (event-attr (hash-ref bs 'b) 'card))))
+  (check-equal? (ids (denote (where (seq A B) same-card) Hv)) '(("a" "b")))
+  (define big (λ (bs) (> (apply + (map (λ (b) (event-attr b 'amount)) (hash-ref bs 'b))) 1000)))
+  (check-equal? (ids (denote (where (kleene+ B) big) Hv)) '(("b" "b'"))))

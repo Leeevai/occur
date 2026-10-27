@@ -283,3 +283,13 @@
  (λ (ctx p denote)
    (filter (λ (m) (<= (- (pmatch-te m) (pmatch-ts m)) (p:within-duration p)))
            (denote (p:within-body p)))))
+
+;; ===========================================================================
+;; PT.where: ⟦P where θ⟧ = { m ∈ ⟦P⟧ : θ(bindings(m)) }. θ may compare
+;; attributes across bindings, use Allen relations, or aggregate over Kleene
+;; lists.
+
+(register!
+ p:where?
+ (λ (ctx p denote)
+   (filter (λ (m) ((p:where-pred p) (pmatch-bindings m))) (denote (p:where-body p)))))
