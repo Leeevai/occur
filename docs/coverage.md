@@ -135,12 +135,12 @@ Status values: `todo`, `partial`, `done`.
 | `PT.relative` | §11 | `(relative-max? x xs)` in `#:where` | `relative-max?` `relative-min?` | tests/families-test.rkt |  | partial |
 | `PT.spatial.distance` | §11 | `within-distance?` `min-distance` ... in `#:where` | `within-distance?` `beyond-distance?` `min/max/avg-distance` | tests/families-test.rkt |  | partial |
 | `PT.spatial.moving` | §11 | `moving-toward?` `moving-away?` `constant-direction?` | (private/pattern/families.rkt) | tests/families-test.rkt |  | partial |
-| `PT.accumulate` | §11 | `accumulate-pattern`; Reflex `accumulate` (M17) | `accumulate-pattern` (private/pattern/families.rkt) | tests/families-test.rkt |  | partial |
+| `PT.accumulate` | §11 | `(pt:accumulate #:count n #:span s)`; `accumulate-pattern` | accumulate condition (private/rules-engine.rkt), `accumulate-pattern` (private/pattern/families.rkt) | tests/families-test.rkt, tests/reflex-traces-runtime-test.rkt, tests/lang-test.rkt |  | partial |
 | `PT.flush` | §11 | `#:timeout-partial (d processing-time)` with `#:retain (timeout)` | `policy-partials` (private/pattern/policies.rkt) | tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
-| `PT.silence` | §11 | `silence-pattern`; Reflex `silence` (M17) | `silence-pattern` | tests/families-test.rkt |  | partial |
-| `PT.recovery` | §11 | `recovery-pattern` | `recovery-pattern` | tests/families-test.rkt |  | partial |
-| `PT.window-close` | §11 | Reflex `window` (M17) | `window-close-operator` (private/pattern/families.rkt) | tests/families-test.rkt |  | partial |
-| `PT.schedule` | §11 | `(window (calendar "cron"))`, `define-schedule` | `calendar-window-operator` (private/window.rkt) | tests/families-test.rkt |  | partial |
+| `PT.silence` | §11 | `(pt:silence #:after d #:recovery b)`; `silence-pattern` | silence condition (private/rules-engine.rkt), `silence-pattern` | tests/families-test.rkt, tests/reflex-traces-runtime-test.rkt |  | partial |
+| `PT.recovery` | §11 | `(pt:silence ... #:recovery #t)`; `recovery-pattern` | silence condition, `recovery-pattern` | tests/families-test.rkt, tests/reflex-traces-runtime-test.rkt |  | partial |
+| `PT.window-close` | §11 | `(pt:window-close #:size w #:offset o #:mode all)` | window-close condition (private/rules-engine.rkt), `window-close-operator` (private/pattern/families.rkt) | tests/families-test.rkt, tests/reflex-traces-runtime-test.rkt |  | partial |
+| `PT.schedule` | §11 | `(pt:schedule "cron")`, `(window (calendar "cron"))`, `define-schedule` | schedule condition (private/rules-engine.rkt), `calendar-window-operator` | tests/families-test.rkt, tests/reflex-traces-runtime-test.rkt |  | partial |
 | `SEL.next` | §12 | `#:selection next` / `skip-till-next-match` | `strategy-check` (private/pattern/policies.rkt) | tests/selection-test.rkt, tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
 | `SEL.strict` | §12 | `#:selection strict` | `strategy-check` registered with the engine; `select-matches` (private/pattern/policies.rkt) | tests/selection-test.rkt, tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
 | `SEL.partition` | §12 | `#:selection partition` | `strategy-check` (private/pattern/policies.rkt) | tests/selection-test.rkt, tests/lang-test.rkt |  | partial |
@@ -175,14 +175,14 @@ Status values: `todo`, `partial`, `done`.
 | `DR.cycle-guard` | §13 | `(feedback s)` stage, `#:recursive n` | `make-program` cycle check, recursive bound (private/dataflow.rkt) | tests/dataflow-test.rkt, tests/lang-test.rkt |  | partial |
 | `DR.act` | §13 | `(act name #:on s #:do e #:completion T)` | `action-operator` (private/derive.rkt) | tests/derive-test.rkt, tests/lang-test.rkt |  | partial |
 | `DR.retract` | §13 | retractions in source data propagate | provenance index in the runner (private/dataflow.rkt) | tests/derive-test.rkt, tests/dataflow-test.rkt, tests/lang-test.rkt |  | partial |
-| `RL.rejudge` | §14 | | | | | todo |
-| `RL.template` | §14 | | | | | todo |
-| `RL.binding` | §14 | | | | | todo |
-| `RL.fan-out` | §14 | | | | | todo |
-| `RL.identity` | §14 | | | | | todo |
-| `RL.source` | §14 | | | | | todo |
-| `RL.ownership` | §14 | | | | | todo |
-| `RL.dangling` | §14 | | | | | todo |
-| `RL.semantics` | §14 | | | | | todo |
-| `RL.carry` | §14 | | | | | todo |
-| `RL.converge` | §14 | | | | | todo |
+| `RL.rejudge` | §14 | job-only edits and new bindings on keys with data | `reconcile`, `config` outputs (private/rules-engine.rkt) | tests/rules-engine-test.rkt, tests/reflex-traces-runtime-test.rkt |  | partial |
+| `RL.template` | §14 | `(rule-template id #:condition c ...)`, `define-condition` | `make-rule` `rule` (private/rules.rkt) | tests/rules-test.rkt, tests/lang-test.rkt |  | partial |
+| `RL.binding` | §14 | `(bind t #:on k #:key bk override ... #:params (...))` | `make-binding` `effective-spec` (private/rules.rkt) | tests/rules-test.rkt, tests/lang-test.rkt |  | partial |
+| `RL.fan-out` | §14 | `(bind t #:on k #:also (k ...))` | `binding-keys` (private/rules.rkt) | tests/rules-test.rkt, tests/lang-test.rkt |  | partial |
+| `RL.identity` | §14 | instances keyed by (rule, key, binding key) | `instances-for` `ispec-identity` (private/rules.rkt) | tests/rules-test.rkt |  | partial |
+| `RL.source` | §14 | `(rule-source name item ...)`, `rule-source-push`, JSON Lines items | `apply-source-msg` `rules-in-force` `read-jsonl-rule-items` (private/rules.rkt) | tests/rules-test.rkt, tests/rules-json-test.rkt, tests/lang-test.rkt |  | partial |
+| `RL.ownership` | §14 | a rule defined in two sources is refused | `rules-in-force` (private/rules.rkt) | tests/rules-test.rkt |  | partial |
+| `RL.dangling` | §14 | reports in the run result | `rules-in-force`, `rules-report` (private/rules.rkt) | tests/rules-test.rkt, tests/rules-engine-test.rkt, tests/rules-json-test.rkt |  | partial |
+| `RL.semantics` | §14 | edits classified on push | `fingerprint` `classify-edit` (private/rules.rkt) | tests/rules-test.rkt, tests/reflex-traces-runtime-test.rkt |  | partial |
+| `RL.carry` | §14 | `#:on-update continue / restart` | `reconcile` (private/rules-engine.rkt) | tests/rules-engine-test.rkt, tests/reflex-traces-runtime-test.rkt |  | partial |
+| `RL.converge` | §14 | re-pushing an identical source | `reconcile` (no edit, no output) | tests/rules-engine-test.rkt |  | partial |
