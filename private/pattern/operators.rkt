@@ -13,7 +13,9 @@
          "../operator.rkt"
          "ast.rkt"
          "reference.rkt"
-         "nfa.rkt")
+         "nfa.rkt"
+         "policies.rkt"
+         "../scheduler.rkt")
 
 ;; DR.derive: from a match m, the event ⟨fresh id, τ′, f(bindings(m)),
 ;; ts(m), te(m), 1, op, m⟩. A match without events (ACT-based) carries a
@@ -72,25 +74,47 @@
 ;; activation (its first event, or an entity activation signal), fed each
 ;; event with its arrival sequence number, and advanced on its own deadlines:
 ;; event-time deadlines for deferred decisions, processing-time deadlines for
-;; hybrid absence. The candidates pass through `emit-matches`, which applies
-;; the output policies (policies.rkt).
+;; hybrid absence. Candidates pass through the policy layer of §12
+;; (policies.rkt). With timed-out partials, the engine runs on the pattern's
+;; body and the top-level where clause is applied here, so matches it has not
+;; yet accepted are the partial matches.
 
-(define current-match-policy (make-parameter #f))
+(struct ist (engine policy latest arrivals) #:transparent)
+
+(define (split-where p)
+  (cond [(p:within? p) (let-values ([(b θ) (split-where (p:within-body p))])
+                         (values (and θ (within b (p:within-duration p))) θ))]
+        [(p:where? p) (values (p:where-body p) (p:where-pred p))]
+        [else (values #f #f)]))
+
+(define (top-within p) (and (p:within? p) (p:within-duration p)))
 
 (define (incremental-pattern-operator p #:key [key #f] #:derive [derive (λ (m) (derive-match m))]
                                       #:selection [selection 'any]
-                                      #:policy [policy #f])
+                                      #:policy [pol (make-match-policy)])
   (define problem (pattern-problem p))
   (when problem (raise-arguments-error 'incremental-pattern-operator problem))
-  ;; policy: #f (report every match) or (vector init step flush deadline)
-  (define (deliver! c pstate ms)
+  (define pol* (struct-copy match-policy pol [within (or (match-policy-within pol) (top-within p))]))
+  (define-values (body θ) (if (match-policy-timeout pol*) (split-where p) (values #f #f)))
+  (when (and (match-policy-timeout pol*) (not θ))
+    (raise-arguments-error 'incremental-pattern-operator "timed-out partial matches need a pattern with a where clause"))
+  (define run-pattern (or body p))
+  (define initials (initial-leaves p))
+  (define (info st) (hasheq 'index (engine-index (ist-engine st)) 'latest (ist-latest st) 'arrival (ist-arrivals st)))
+  (define (deliver st ms c)
+    (define emit (λ (m) (emit! c (derive m))))
+    (define W (ctx-watermark c))
+    (define now (ctx-now c))
     (cond
-      [(not policy) (for ([m (in-list ms)]) (emit! c (derive m))) pstate]
-      [else ((vector-ref policy 1) pstate ms c (λ (m) (emit! c (derive m))))]))
+      [θ (define-values (done partial) (partition (λ (m) (θ (pmatch-bindings m))) ms))
+         (define ps1 (policy-step pol* (ist-policy st) done (info st) W now emit))
+         (struct-copy ist st [policy (policy-partials pol* ps1 partial (info st) W now emit)])]
+      [else (struct-copy ist st [policy (policy-step pol* (ist-policy st) ms (info st) W now emit)])]))
   (define (advance g st c)
-    (define-values (e2 ms) (engine-advance (car st) (ctx-watermark c) (ctx-now c) #:last-finite g))
-    (define ps (deliver! c (cdr st) ms))
-    (cons e2 (if policy ((vector-ref policy 2) ps c (λ (m) (emit! c (derive m)))) ps)))
+    (define-values (e2 ms) (engine-advance (ist-engine st) (ctx-watermark c) (ctx-now c) #:last-finite g))
+    (define st2 (deliver (struct-copy ist st [engine e2]) ms c))
+    (struct-copy ist st2 [policy (policy-flush pol* (ist-policy st2) (info st2) (ctx-watermark c) (ctx-now c)
+                                               (λ (m) (emit! c (derive m))))]))
   (make-operator
    'pattern
    #:monotone? (monotone? p)
@@ -99,25 +123,26 @@
    #:init-global (λ () -inf.0)                            ; the newest finite watermark
    #:on-watermark (λ (g keys W c) (values (if (< W +inf.0) (time-max g W) g) keys))
    #:init-key (λ (g k c)
-                (define-values (e ms) (engine-start (make-engine p #:activation (ctx-now c) #:selection selection)))
-                (define ps0 (if policy ((vector-ref policy 0)) #f))
-                (cons e (deliver! c ps0 ms)))
+                (define-values (e ms) (engine-start (make-engine run-pattern #:activation (ctx-now c) #:selection selection)))
+                (deliver (ist e (policy-init pol*) -1 (hash)) ms c))
    #:on-event (λ (g st e c)
-                (define-values (e2 ms) (engine-event (car st) e (ctx-seq c)))
-                (advance g (cons e2 (deliver! c (cdr st) ms)) c))
+                (define seq (ctx-seq c))
+                (define st1 (struct-copy ist st
+                                         [latest (if (for/or ([l initials]) (qualifies? l e)) seq (ist-latest st))]
+                                         [arrivals (hash-set (ist-arrivals st) seq (ctx-now c))]))
+                (define-values (e2 ms) (engine-event (ist-engine st1) e seq))
+                (advance g (deliver (struct-copy ist st1 [engine e2]) ms c) c))
    #:on-signal (λ (g st sig c) st)
    #:event-deadline (λ (st)
-                      (define-values (evt proc) (engine-deadlines (car st)))
-                      (define pd (and policy ((vector-ref policy 3) (cdr st) 'event-time)))
-                      (cond [(and evt pd) (if (< (deadline-time* evt) (deadline-time* pd)) evt pd)] [else (or evt pd)]))
+                      (define-values (evt proc) (engine-deadlines (ist-engine st)))
+                      (earliest evt (policy-deadline pol* (ist-policy st) 'event-time)))
    #:deadline (λ (st)
-                (define-values (evt proc) (engine-deadlines (car st)))
-                (define pd (and policy ((vector-ref policy 3) (cdr st) 'processing-time)))
-                (cond [(and proc pd) (min proc pd)] [else (or proc pd)]))
+                (define-values (evt proc) (engine-deadlines (ist-engine st)))
+                (earliest proc (policy-deadline pol* (ist-policy st) 'processing-time)))
    #:on-timer (λ (g st c) (advance g st c))))
 
-(define (deadline-time* d) (if (real? d) d (strictly-after-time* d)))
-(define (strictly-after-time* d) (vector-ref (struct->vector d) 1))
+(define (earliest a b)
+  (cond [(and a b) (if (< (deadline-time a) (deadline-time b)) a b)] [else (or a b)]))
 
 ;; ---------------------------------------------------------------------------
 ;; The pattern operator used by #lang occur. The reference engine implements
@@ -125,20 +150,22 @@
 ;; SKIP.no-skip, EVAL.deferred); other policies need the incremental engine.
 
 (define default-policies
-  (hasheq 'selection 'any 'consumption 'unrestricted 'output 'every 'skip 'no-skip 'eval 'deferred))
+  (hasheq 'selection 'any 'consumption 'unrestricted 'output 'every 'skip 'no-skip 'eval #f))
 
 (define (pattern-operator p #:key [key #f] #:derive [derive (λ (m) (derive-match m))]
                           #:policies [policies (hasheq)] #:engine [engine 'incremental])
   (define ps (for/fold ([h default-policies]) ([(k v) (in-hash policies)]) (hash-set h k v)))
   (case engine
     [(incremental)
-     (for ([(k v) (in-hash ps)] #:unless (memq k '(selection)))
-       (unless (equal? v (hash-ref default-policies k))
-         (raise-arguments-error 'pattern-operator "this policy needs the policy layer (§12)" "policy" k "value" v)))
-     (incremental-pattern-operator p #:key key #:derive derive #:selection (hash-ref ps 'selection))]
+     (incremental-pattern-operator
+      p #:key key #:derive derive #:selection (hash-ref ps 'selection)
+      #:policy (make-match-policy #:consumption (hash-ref ps 'consumption) #:output (hash-ref ps 'output)
+                                  #:skip (hash-ref ps 'skip) #:eval (hash-ref ps 'eval #f)
+                                  #:timeout-partial (hash-ref ps 'timeout-partial #f)
+                                  #:retain (hash-ref ps 'retain '())))]
     [(reference)
      (for ([(k v) (in-hash ps)])
-       (unless (equal? v (hash-ref default-policies k))
+       (unless (equal? v (hash-ref default-policies k #f))
          (raise-arguments-error 'pattern-operator
                                 "the reference engine implements only the most permissive semantics; use the incremental engine"
                                 "policy" k "value" v)))
@@ -152,5 +179,5 @@
                                  #:policies hash? #:engine symbol?)
                          operator?)]
   [incremental-pattern-operator (->* (pat?) (#:key (or/c #f (-> event? any/c)) #:derive (-> pmatch? event?)
-                                             #:selection symbol? #:policy (or/c #f vector?))
+                                             #:selection symbol? #:policy match-policy?)
                                      operator?)]))
