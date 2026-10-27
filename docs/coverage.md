@@ -49,8 +49,8 @@ Status values: `todo`, `partial`, `done`.
 | `TM.timer` | §6 | `(delay d #:clock c)` stage | `delay-operator`, operator deadlines (private/progress.rkt, private/dataflow.rkt) | tests/dataflow-test.rkt, tests/progress-test.rkt, tests/lang-test.rkt |  | partial |
 | `TM.schedule` | §6 | `(define-schedule name "cron")` | `parse-cron` `cron-next` `schedule-operator` (private/scheduler.rkt, private/progress.rkt) | tests/cron-test.rkt, tests/progress-test.rkt, tests/lang-test.rkt |  | partial |
 | `TM.retraction` | §6 | `(retraction-of id)` in source data; JSON Lines `{"retract": id}` | `retraction` items, provenance propagation, `emit-correction!` (private/dataflow.rkt, private/progress.rkt) | tests/dataflow-test.rkt, tests/progress-test.rkt, tests/lang-test.rkt |  | partial |
-| `TM.checkpoint` | §6 | | | | | todo |
-| `TM.replay` | §6 | | | | | todo |
+| `TM.checkpoint` | §6 | script steps `(checkpoint)` and `(restore)` | `checkpoint` `restore` `take-snapshot!` `restore-snapshot!` (private/dataflow.rkt) | tests/checkpoint-test.rkt, tests/lang-test.rkt |  | partial |
+| `TM.replay` | §6 | script step `(cold-start)`; held outputs released at the first `rule-source-push` | `cold-start` `cold-start!` `release-held!` `default-coalesce` (private/dataflow.rkt), `coalesce-rule-outputs` (private/rules-engine.rkt) | tests/checkpoint-test.rkt, tests/lang-test.rkt |  | partial |
 | `WN.tumbling` | §7 | `(window (tumbling #:size d #:offset o) ...)` | `grid-window-operator` `tumbling` (private/window.rkt) | tests/window-test.rkt, tests/window-prop-test.rkt, tests/lang-test.rkt |  | partial |
 | `WN.sliding` | §7 | `(window (sliding #:size d #:slide s) ...)` | `grid-window-operator` `sliding` (private/window.rkt) | tests/window-test.rkt, tests/window-prop-test.rkt, tests/lang-test.rkt |  | partial |
 | `WN.session` | §7 | `(window (session #:gap g))` | `session-window-operator` (private/window.rkt) | tests/window-test.rkt, tests/window-prop-test.rkt, tests/lang-test.rkt |  | partial |
@@ -152,7 +152,7 @@ Status values: `todo`, `partial`, `done`.
 | `CON.chronicle` | §12 | `#:consumption chronicle` | policy layer | tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
 | `CON.continuous` | §12 | `#:consumption continuous` | policy layer | tests/policies-test.rkt |  | partial |
 | `OUT.rate-limit` | §12 | `(rate-limit d #:mode drop/defer)` stage | `rate-limit-operator` (private/ops/output.rkt) | tests/output-test.rkt, tests/lang-test.rkt |  | partial |
-| `OUT.coalesce` | §12 | `(coalesce #:sum (a ...))` stage; schedules and calendar windows coalesce ticks | `coalesce-operator` `coalesce-events` (private/ops/output.rkt) | tests/output-test.rkt, tests/progress-test.rkt, tests/families-test.rkt |  | partial |
+| `OUT.coalesce` | §12 | `(coalesce #:sum (a ...))` stage; schedules and calendar windows coalesce ticks | `coalesce-operator` `coalesce-events` (private/ops/output.rkt); held replay outputs (private/dataflow.rkt) | tests/output-test.rkt, tests/progress-test.rkt, tests/families-test.rkt, tests/checkpoint-test.rkt |  | partial |
 | `OUT.first` | §12 | `#:output first` | policy layer | tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
 | `OUT.timeout-partial` | §12 | `#:timeout-partial (d clock)` | `policy-partials` (private/pattern/policies.rkt) | tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
 | `OUT.edge` | §12 | `(edge #:enter e #:leave e)` stage | `edge-operator` (private/ops/output.rkt) | tests/output-test.rkt, tests/lang-test.rkt |  | partial |
@@ -168,7 +168,7 @@ Status values: `todo`, `partial`, `done`.
 | `EVAL.deferred` | §12 | `#:eval deferred`; forced by last/maximal | engine deferred nodes, policy releases | tests/nfa-test.rkt, tests/policies-test.rkt |  | partial |
 | `DR.summary` | §13 | `(summarize)` stage | `summarize` `summarized-output` `make-summary` (private/derive.rkt) | tests/derive-test.rkt, tests/lang-test.rkt |  | partial |
 | `DR.view` | §13 | `(define-view ...)`, `view-ref`, `classify-health` | `view-operator` `view-ref` `classify-health` (private/derive.rkt) | tests/derive-test.rkt, tests/lang-test.rkt |  | partial |
-| `DR.output-identity` | §13 | `(dedupe-outputs)` stage | `output-identity` `event-identity` `dedupe-outputs` (private/derive.rkt) | tests/derive-test.rkt, tests/lang-test.rkt |  | partial |
+| `DR.output-identity` | §13 | `(dedupe-outputs)` stage | `output-identity` `event-identity` `dedupe-outputs` (private/derive.rkt) | tests/derive-test.rkt, tests/lang-test.rkt, tests/checkpoint-test.rkt |  | partial |
 | `DR.derive` | §13 | `#:emit (T [a e] ...)` in `define-pattern` | `derive-match` (private/pattern/operators.rkt) | tests/derive-test.rkt, tests/lang-test.rkt |  | partial |
 | `DR.ordered` | §13 | delivery grouped by key per instant (runner) | `flush-outbox!` (private/dataflow.rkt), `delivery-groups` (private/derive.rkt) | tests/derive-test.rkt, tests/lang-test.rkt |  | partial |
 | `DR.closure` | §13 | any stage or pattern reads derived streams | programs over nodes (private/dataflow.rkt) | tests/derive-test.rkt, tests/lang-test.rkt |  | partial |
