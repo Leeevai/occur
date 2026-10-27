@@ -74,3 +74,46 @@
   [keyed-watermark-operator (->* (#:key (-> event? any/c) #:kind (-> event? any/c))
                                  (#:kinds (or/c #f list?) #:mode (or/c 'any 'all))
                                  operator?)]))
+
+;; ===========================================================================
+;; TM.skew-guard: drop and count any event with te(e) > now + B. Under
+;; high-water-mark merging, one far-future timestamp would otherwise make
+;; every later real event late.
+
+(define (skew-guard-operator bound)
+  (stateless-operator
+   'skew-guard
+   (λ (e c)
+     (if (> (event-te e) (+ (ctx-now c) bound))
+         (count! c 'future-skew)
+         (emit! c e)))))
+
+;; ===========================================================================
+;; TM.lateness: an event is late when it arrives with te(e) < W. The policy
+;; drops it (and counts it), sends it to a side output (port 1), or accepts
+;; it when it is within an allowed lateness L (te(e) >= W − L).
+
+(define (lateness-operator policy)
+  (make-operator
+   'lateness
+   #:outputs 2
+   #:on-event
+   (λ (g s e c)
+     (define W (ctx-watermark c))
+     (cond
+       [(>= (event-te e) W) (emit! c e)]
+       [(eq? policy 'drop) (count! c 'late)]
+       [(eq? policy 'side) (count! c 'late) (emit! c e 1)]
+       [(and (pair? policy) (eq? (car policy) 'allow))
+        (cond [(>= (event-te e) (- W (cadr policy))) (count! c 'late-accepted) (emit! c e)]
+              [else (count! c 'late)])])
+     s)))
+
+(define lateness-policy/c
+  (or/c 'drop 'side (list/c 'allow duration?)))
+
+(provide
+ lateness-policy/c
+ (contract-out
+  [skew-guard-operator (-> duration? operator?)]
+  [lateness-operator (-> lateness-policy/c operator?)]))

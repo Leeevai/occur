@@ -49,3 +49,33 @@
        (check-true (>= any pa))
        (check-true (>= all pl))
        (values w2 any all)))))
+
+(define (pt id t) (make-event 'X '() #:id id #:at t))
+
+(spec-test 'TM.skew-guard "events stamped more than B ahead of the clock are dropped and counted"
+  (define r (run-operator (skew-guard-operator (hours 1))
+                          (list (list (pt "ok" 4000) (pt "future" 9000) (pt "edge" 4600)))
+                          #:arrivals '((1000 1000 1000))))
+  (check-equal? (map event-id (run-result-events r)) '("ok" "edge"))
+  (check-equal? (run-result-counter r 'op 'future-skew) 1))
+
+(define (late-run policy)
+  (define src (make-source 'in))
+  (define n (make-node 'late (lateness-operator policy) (list src)))
+  (define on (make-node 'on-time (make-operator 'on) (list (cons n 0)) #:sink? #t))
+  (define side (make-node 'side (make-operator 'side) (list (cons n 1)) #:sink? #t))
+  (run (make-program (list on side))
+       (list (arrive 1 'in (pt "a" 10)) (watermark-to 'in 20)
+             (arrive 2 'in (pt "b" 18)) (arrive 3 'in (pt "c" 5)) (arrive 4 'in (pt "d" 25)))
+       #:final-watermark? #f))
+
+(spec-test 'TM.lateness "late events are dropped, sent to a side output, or accepted within L"
+  (define dropped (late-run 'drop))
+  (check-equal? (map event-id (run-result-events dropped 'on-time)) '("a" "d"))
+  (check-equal? (run-result-counter dropped 'late 'late) 2)
+  (define side (late-run 'side))
+  (check-equal? (map event-id (run-result-events side 'side)) '("b" "c"))
+  (define allowed (late-run '(allow 5)))
+  (check-equal? (map event-id (run-result-events allowed 'on-time)) '("a" "b" "d"))
+  (check-equal? (run-result-counter allowed 'late 'late-accepted) 1)
+  (check-equal? (run-result-counter allowed 'late 'late) 1))
