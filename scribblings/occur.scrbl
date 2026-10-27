@@ -33,3 +33,4 @@ time.
 @include-section["structure.scrbl"]
 @include-section["progress.scrbl"]
 @include-section["windows.scrbl"]
+@include-section["aggregation.scrbl"]
