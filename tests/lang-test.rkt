@@ -281,3 +281,10 @@
    (string-append header "(event-type P [card : String])\n(source a #:types (Swipe))\n(source b #:types (P))\n"
                   "(define-stream s (from a)\n (join b #:kind table #:key amount))\n")
    #rx"unknown attribute amount: P events carry" 7))
+
+(require (only-in "lang/allen.rkt" [occur-run allen-run]))
+
+(spec-test '(AL.during AL.starts AL.finishes) "Allen relations are available in stage expressions"
+  (define r (allen-run))
+  (check-equal? (map (λ (e) (event-attr e 'code)) (by-node r 'in-shift)) '("c"))
+  (check-equal? (map (λ (e) (event-attr e 'code)) (by-node r 'at-edges)) '("b" "d")))

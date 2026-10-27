@@ -21,6 +21,7 @@
          "private/aggregate.rkt"
          "private/sketch.rkt"
          "private/join.rkt"
+         "private/allen.rkt"
          (only-in "private/scheduler.rkt"
                   cron cron? cron-text parse-cron cron-matches? cron-next cron-prev cron-ticks-between))
 (provide (all-from-out "private/time.rkt")
@@ -39,4 +40,5 @@
          (all-from-out "private/aggregate.rkt")
          (all-from-out "private/sketch.rkt")
          (all-from-out "private/join.rkt")
+         (all-from-out "private/allen.rkt")
          cron cron? cron-text parse-cron cron-matches? cron-next cron-prev cron-ticks-between)
