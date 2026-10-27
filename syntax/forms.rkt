@@ -494,12 +494,14 @@
 ;; ---------------------------------------------------------------------------
 ;; (define-condition name #:kind kind #:parameters ([#:kw param default maybe-override] ...)
 ;;                   maybe-positional)
-;; (define-condition name #:as other #:rename ([#:kw #:other-kw] ...))          RL.template
+;; (define-condition name #:as other #:rename ([#:kw #:other-kw maybe-convert] ...))  RL.template
 ;;
 ;; A condition form builds a rule condition. Its parameters are keywords,
 ;; checked at compile time; those marked #:override are the numeric
 ;; parameters a binding may override (RL.binding). A library defines its
-;; vocabulary with #:as, renaming the keywords of another condition form.
+;; vocabulary with #:as, renaming the keywords of another condition form;
+;; a rename may convert the value with a procedure (not for overridable
+;; parameters, which bindings override unconverted).
 
 (begin-for-syntax
   (define (condition-expander name kind params positional)
@@ -541,22 +543,29 @@
                           'params-datum)])
              (condition-static 'name 'kind ps 'positional
                                (condition-expander 'name 'kind ps 'positional)))))]
-    [(_ name:id #:as other:id #:rename ([kw:keyword okw:keyword] ...))
+    [(_ name:id #:as other:id #:rename ([kw:keyword okw:keyword (~optional conv:expr)] ...))
      (define target (lookup-static #'other))
      (unless (condition-static? target) (raise-syntax-error 'define-condition "not a condition" stx #'other))
      (for ([o (syntax->list #'(okw ...))])
        (unless (for/or ([p (condition-static-params target)]) (eq? (vector-ref p 0) (syntax-e o)))
          (raise-syntax-error 'define-condition (format "~a has no parameter ~a" (syntax-e #'other) (syntax-e o)) stx o)))
-     (with-syntax ([renames (map cons (map syntax-e (syntax->list #'(kw ...))) (map syntax-e (syntax->list #'(okw ...))))])
+     (for ([k (syntax->list #'(kw ...))] [o (syntax->list #'(okw ...))] [c (attribute conv)] #:when c)
+       (when (for/or ([p (condition-static-params target)]) (and (eq? (vector-ref p 0) (syntax-e o)) (vector-ref p 3)))
+         (raise-syntax-error 'define-condition "an overridable parameter cannot be converted: bindings override it unconverted"
+                             stx k)))
+     (with-syntax ([renames (map cons (map syntax-e (syntax->list #'(kw ...))) (map syntax-e (syntax->list #'(okw ...))))]
+                   [(cv ...) (for/list ([c (attribute conv)]) (if c #`(quote-syntax #,c) #'#f))])
        #'(define-syntax name
            (let* ([t (syntax-local-value #'other)]
                   [rn 'renames]
+                  [convs (list cv ...)]
                   [ps (for/list ([r rn])
                         (define tp (for/first ([p (condition-static-params t)] #:when (eq? (vector-ref p 0) (cdr r))) p))
                         (vector (car r) (vector-ref tp 1) (vector-ref tp 2) (vector-ref tp 3)))])
              (condition-static 'name (condition-static-kind t) ps (condition-static-positional t)
                                (λ (use)
-                                 ;; rename the keywords and expand as the target condition
+                                 ;; rename the keywords, convert the values that have a
+                                 ;; conversion, and expand as the target condition
                                  (syntax-case use ()
                                    [(_ . args)
                                     (let loop ([xs (syntax->list #'args)] [acc '()])
@@ -567,7 +576,9 @@
                                          (unless m (raise-syntax-error 'name (format "unknown parameter ~a; expected ~a"
                                                                                     (syntax-e (car xs)) (map car rn))
                                                                        use (car xs)))
-                                         (loop (cddr xs) (list* (cadr xs) (datum->syntax (car xs) (cdr m)) acc))]
+                                         (define c (list-ref convs (index-of rn m)))
+                                         (define v (if c (datum->syntax use (list c (cadr xs)) (cadr xs)) (cadr xs)))
+                                         (loop (cddr xs) (list* v (datum->syntax (car xs) (cdr m)) acc))]
                                         [else (loop (cdr xs) (cons (car xs) acc))]))]))))))]))
 
 ;; The core conditions, named after their spec IDs.

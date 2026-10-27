@@ -483,3 +483,28 @@
   (check-compile-error (string-append "#lang occur\n(event-type U [xs : Any])\n(event-type C [x : Any] #:derived)\n(source u #:types (U))\n"
                                       "(define-stream s (from u)\n (split C #:for ([x xs]) [x x] #:ts 0 #:summary ([k 1])))\n")
                        #rx"#:summary needs #:reference" 6))
+
+(define conditions-header
+  (string-append "#lang occur\n"
+                 "(define-condition closes #:as pt:window-close\n"
+                 "  #:rename ([#:width #:size] [#:every-kind #:mode (λ (all?) (if all? 'all 'any))]))\n"
+                 "(define-condition enough #:as pt:accumulate #:rename ([#:at-least #:count]))\n"))
+
+(spec-test '(RL.template RL.binding) "a library names its conditions with #:as, renaming and converting parameters"
+  (define ns (eval-occur (string-append conditions-header
+                                        "(rule-template w #:condition (closes #:width 60 #:every-kind #f))\n"
+                                        "(rule-template e #:condition (enough #:at-least 4) #:applies-to none)\n"
+                                        "(rule-source src (bind e #:on \"d\" #:at-least 2))\n"
+                                        "(define (params-of r) (condition-params (rule-condition r)))\n"
+                                        "(define found (list (params-of w-rule) (params-of e-rule)"
+                                        " (binding-overrides (car src))))\n"
+                                        "(provide found)\n")))
+  (define found (eval 'found ns))
+  (check-equal? (first found) (hasheq 'size 60 'offset 0 'mode 'any))
+  (check-equal? (second found) (hasheq 'count 4 'span 0))
+  ;; a binding overrides a renamed parameter by its new keyword
+  (check-equal? (third found) (hasheq 'count 2))
+  (check-compile-error (string-append conditions-header "(rule-template w #:condition (closes #:size 60))\n")
+                       #rx"unknown parameter #:size; expected \\(#:width #:every-kind\\)" 5)
+  (check-compile-error "#lang occur\n(define-condition c #:as pt:accumulate #:rename\n ([#:n #:count add1]))\n"
+                       #rx"an overridable parameter cannot be converted" 3))
