@@ -210,3 +210,22 @@
               #:unless (for/or ([q (in-list Q)])
                          (and (< (pmatch-te m) (pmatch-ts q)) (<= (pmatch-ts q) (+ (pmatch-te m) Δ)))))
      (struct-copy pmatch m [te (+ (pmatch-te m) Δ)]))))
+
+;; ===========================================================================
+;; PT.span-absence:
+;;   ⟦P unless Q⟧ = { m ∈ ⟦P⟧ : no q ∈ ⟦Q⟧, q ∉ m, with ts(m) < ts(q) and te(q) < te(m) }
+;; q ∉ m: q is not part of m (its events are not all m's).
+
+(define (part-of? q m)
+  (define ids (map event-id (pmatch-events m)))
+  (and (pair? (pmatch-events q)) (andmap (λ (e) (member (event-id e) ids)) (pmatch-events q))))
+
+(register!
+ p:unless?
+ (λ (ctx p denote)
+   (define Q (denote (p:unless-neg p)))
+   (for/list ([m (in-list (denote (p:unless-body p)))]
+              #:unless (for/or ([q (in-list Q)])
+                         (and (not (part-of? q m))
+                              (< (pmatch-ts m) (pmatch-ts q)) (< (pmatch-te q) (pmatch-te m)))))
+     m)))

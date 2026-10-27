@@ -75,3 +75,10 @@
   ;; P may be ACT: total silence since activation
   (check-equal? (map (λ (m) (pmatch-te m)) (denote (absence act (prim 'X) 600) '() #:activation 0)) '(600))
   (check-equal? (denote (absence act (prim 'X) 600) (list (ev "x" 'X 100)) #:activation 0) '()))
+
+(spec-test 'PT.span-absence "unless forbids Q anywhere strictly inside the whole match"
+  (define V (prim 'V))
+  (define H2 (list (ev "a1" 'A 1) (ev "b1" 'B 2) (ev "v" 'V 3) (ev "b2" 'B 4)))
+  (check-equal? (ids (denote (span-absence (seq A B) V) H2)) '(("a1" "b1")))
+  ;; Q's own events inside the match do not count against it
+  (check-equal? (ids (denote (span-absence (seq A (prim 'V #:bind 'v) B) V) H2)) '(("a1" "v" "b2"))))
