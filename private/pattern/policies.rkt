@@ -54,11 +54,37 @@
 (for ([s '(strict partition next)]) (register-selection-check! s (strategy-check s)))
 
 ;; The oracle's version: filter ⟦P⟧(H) by a strategy, with H's order as the
-;; arrival order (one key, so global and partition indices coincide).
-(define (select-matches ms strategy history)
-  (define index (for/hash ([e (in-list history)] [i (in-naturals)]) (values (event-id e) i)))
+;; arrival order within the key. #:global-index maps each event's id to its
+;; arrival index over all keys, which strict contiguity reads; by default it
+;; is H's order (one key, so global and partition indices coincide). The
+;; oracle records a step's end point by its position in H, so with a global
+;; index the end points are translated first.
+(define (select-matches ms strategy history #:global-index [global #f])
+  (define pindex (for/hash ([e (in-list history)] [i (in-naturals)]) (values (event-id e) i)))
+  (define index (or global pindex))
+  (define pos->index (for/vector ([e (in-list history)]) (hash-ref index (event-id e))))
+  (define (translate m)
+    (if global
+        (pmatch (pmatch-events m) (pmatch-bindings m) (pmatch-ts m) (pmatch-te m)
+                (for/list ([u (in-list (pmatch-leaves m))])
+                  (define pred (leaf-use-pred u))
+                  (if (and pred (>= (cdr pred) 0))
+                      (leaf-use (leaf-use-leaf u) (leaf-use-event u) (cons (car pred) (vector-ref pos->index (cdr pred))))
+                      u)))
+        m))
   (define check (strategy-check strategy))
-  (filter (λ (m) (check m index index (λ (leaf) (filter (λ (e) (qualifies? leaf e)) history)))) ms))
+  (define (qual-of leaf) (filter (λ (e) (qualifies? leaf e)) history))
+  (filter (λ (m) (check (translate m) index pindex qual-of)) ms))
+
+;; OUT.maximal over a complete set of matches: those not strictly contained,
+;; by events, in another.
+(define (maximal-matches ms)
+  (define sets (for/list ([m (in-list ms)]) (for/hash ([e (in-list (pmatch-events m))]) (values (event-id e) #t))))
+  (define (strictly-within? a b)
+    (and (< (hash-count a) (hash-count b)) (for/and ([k (in-hash-keys a)]) (hash-ref b k #f))))
+  (for/list ([m (in-list ms)] [a (in-list sets)]
+             #:unless (for/or ([b (in-list sets)]) (strictly-within? a b)))
+    m))
 
 (define selection-strategies '(strict partition next any))
 
@@ -66,7 +92,10 @@
  selection-strategies
  (contract-out
   [qualifies? (-> p:primitive? event? boolean?)]
-  [select-matches (-> (listof pmatch?) (or/c 'strict 'partition 'next 'any) (listof event?) (listof pmatch?))]))
+  [select-matches (->* ((listof pmatch?) (or/c 'strict 'partition 'next 'any) (listof event?))
+                       (#:global-index (or/c #f hash?))
+                       (listof pmatch?))]
+  [maximal-matches (-> (listof pmatch?) (listof pmatch?))]))
 
 ;; ===========================================================================
 ;; §12.2–§12.3 The policy layer (decision 0012)

@@ -72,3 +72,19 @@
    (property ([seed (gen:integer-in 0 1000000)] [h gen:point-history] [s (gen:one-of '(strict partition next))])
      (define p (random-pattern seed #:fragment 'selection))
      (check-equal? (keys (engine-matches p h s)) (keys (select-matches (denote p h #:activation 0) s h))))))
+
+(spec-test '(SEL.strict SEL.partition) "the oracle reads strict contiguity over all keys when given the global arrival index"
+  (define a (make-event 'A '((k . "x")) #:id "a" #:at 1))
+  (define b (make-event 'B '((k . "x")) #:id "b" #:at 3))
+  (define p (seq (prim 'A #:bind 'a) (prim 'B #:bind 'b)))
+  (define hx (list a b))                       ; key x's history
+  (define global (hash "a" 0 "o" 1 "b" 2))     ; key y's event "o" arrived between them
+  (define ms (denote p hx))
+  (check-equal? (length (select-matches ms 'strict hx)) 1)
+  (check-equal? (length (select-matches ms 'strict hx #:global-index global)) 0)
+  (check-equal? (length (select-matches ms 'partition hx #:global-index global)) 1))
+
+(spec-test 'OUT.maximal "the oracle's maximal output keeps the matches not strictly contained in another"
+  (check-equal? (id-set (maximal-matches (denote card-testing trace-a))) (set '("e1" "e2" "e4")))
+  (check-equal? (id-set (maximal-matches (select-matches (denote card-testing trace-a) 'strict trace-a)))
+                (set '("e1" "e2"))))
