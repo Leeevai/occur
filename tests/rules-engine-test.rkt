@@ -36,6 +36,14 @@
                       (arrive 10 'contribs (contrib 10 10 1)) (arrive 20 'contribs (contrib 20 20 1)) (advance-to 300))))
   (check-equal? (triggers r) '((110 max_delay (10 20) 2))))
 
+(spec-test '(PT.flush PT.accumulate) "after a samples output, the flush clock starts again at the next contribution"
+  ;; samples at 20 consume both contributions; the next one arrives at 500,
+  ;; long after 10 + 100, and is flushed at 600, not at once
+  (define r (go (list (push (list (acc 2 #:flush 100)) #:at 0)
+                      (arrive 10 'contribs (contrib 10 10 1)) (arrive 20 'contribs (contrib 20 20 1))
+                      (arrive 500 'contribs (contrib 500 500 1)) (advance-to 700))))
+  (check-equal? (triggers r) '((20 samples (10 20) 2) (600 max_delay (500 500) 1))))
+
 (spec-test '(CON.retain PT.flush) "with reset_on_max_delay false the flush retains its contributions"
   (define steps (list (push (list (acc 3 #:flush 100 #:retain? #t)) #:at 0)
                       (arrive 10 'contribs (contrib 10 10 1)) (advance-to 150)

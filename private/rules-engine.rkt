@@ -37,7 +37,9 @@
 ;; carry? : old-spec new-spec -> boolean (progress means the same in both)
 ;; rejudge? : boolean (job-only edits make it emit a config output)
 ;; consumes? : intent -> boolean (handled generically by reason)
-(struct behaviour (init on-contribution on-timer deadline carry? rejudge? evaluate) #:transparent)
+;; on-consume: the condition state after an output that consumed the
+;; pending contributions.
+(struct behaviour (init on-contribution on-timer deadline carry? rejudge? evaluate on-consume) #:transparent)
 
 ;; An intent to output: the reason, the window [ws, we] (ws may be 'none),
 ;; the windows merged, and whether the window is the pending contributions'
@@ -71,7 +73,10 @@
    (λ (cs sp pending) (and (modifier sp 'flush) cs (pair? pending) (+ cs (modifier sp 'flush))))
    (λ (old new) #t)
    #t
-   (λ (cs sp pending) (if (ready? sp pending) (list (intent 'samples #f #f 1 #t)) '()))))
+   (λ (cs sp pending) (if (ready? sp pending) (list (intent 'samples #f #f 1 #t)) '()))
+   ;; the flush clock counts from the first contribution after a consuming
+   ;; output, so it stops with the contributions it was counting for
+   (λ (cs) #f)))
 
 (define (ready? sp pending)
   (and (pair? pending)
@@ -101,7 +106,8 @@
    (λ (cs sp pending) #f)
    (λ (old new) (and (equal? (param old 'size) (param new 'size)) (equal? (param old 'offset 0) (param new 'offset 0))))
    #f
-   (λ (cs sp pending) '())))
+   (λ (cs sp pending) '())
+   (λ (cs) cs)))
 
 ;; ---------------------------------------------------------------------------
 ;; PT.silence (with PT.recovery): on the hybrid clock, silence fires once the
@@ -130,7 +136,8 @@
    (λ (cs sp pending) (and (not (vector-ref cs 1)) (+ (cdr (vector-ref cs 0)) (param sp 'after))))
    (λ (old new) #t)
    #f
-   (λ (cs sp pending) '())))
+   (λ (cs sp pending) '())
+   (λ (cs) cs)))
 
 ;; ---------------------------------------------------------------------------
 ;; PT.schedule: WN.calendar(expr) in processing time, read in UTC, firing
@@ -152,7 +159,8 @@
    (λ (cs sp pending) (cron-next (vector-ref cs 0) (vector-ref cs 2)))
    (λ (old new) (equal? (param old 'cron) (param new 'cron)))
    #f
-   (λ (cs sp pending) '())))
+   (λ (cs sp pending) '())
+   (λ (cs) cs)))
 
 ;; ---------------------------------------------------------------------------
 ;; Registering the four conditions with their overridable parameters.
@@ -245,7 +253,8 @@
                         (sources-of pending) now))
      ;; a retained flush consumes nothing (CON.retain)
      (define retain? (and (eq? reason 'max_delay) (modifier sp 'flush-retain? #f)))
-     (struct-copy inst in [last now] [held '()] [rejudge? #f] [pending (if retain? pending '())])]))
+     (struct-copy inst in [last now] [held '()] [rejudge? #f] [pending (if retain? pending '())]
+                  [cstate (if retain? (inst-cstate in) ((behaviour-on-consume (behaviour-of sp)) (inst-cstate in)))])]))
 
 ;; OUT.rate-limit: emit now, or hold until the cap ends (defer), or drop.
 (define (offer in new-intents now newest-of emit count!)
