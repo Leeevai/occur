@@ -233,3 +233,28 @@
 (spec-test 'CX.entity "#:directory needs a declared directory and a #:key"
   (check-compile-error (string-append header "(source feed #:types (Swipe) #:key card\n #:directory nope)\n")
                        #rx"not a declared directory" 4))
+
+(require (only-in "lang/aggregate.rkt" [occur-run aggregate-run]))
+
+(spec-test '(AG.sum AG.count AG.percentile AG.avg AG.variance AG.count-distinct AG.top-k AG.mode AG.median
+             AG.first AG.last AG.argmax AG.span AG.approx)
+           "aggregate stages fuse with windows or run per key"
+  (define r (aggregate-run))
+  (check-equal? (map (λ (e) (list (event-attr e 'key) (event-ts e) (event-te e) (event-attr e 'total) (event-attr e 'n)))
+                     (by-node r 'spend))
+                '(("c1" -300 300 40 2) ("c1" 0 600 90 3) ("c1" 300 900 50 1) ("c2" -300 300 5 1) ("c2" 0 600 5 1)))
+  (check-equal? (map (λ (e) (event-attr e 'total)) (by-node r 'running)) '(10 40 5 90))
+  (define st (car (by-node r 'stats)))
+  (check-equal? (event-attr st 'mean) 95/4)
+  (check-equal? (event-attr st 'cards) 2)
+  (check-equal? (event-attr st 'top) '(50 30))
+  (check-equal? (event-attr st 'busiest) "c1")
+  (check-equal? (event-attr st 'middle) 20)
+  (check-equal? (list (event-attr st 'first-card) (event-attr st 'last-card)) '("c1" "c1"))
+  (check-equal? (event-attr (event-attr st 'biggest) 'amount) 50)
+  (check-equal? (event-attr st 'span) 370)
+  (check-equal? (event-attr st 'approx-cards) 2))
+
+(spec-test 'AG.count "unknown aggregates are compile-time errors"
+  (check-compile-error (string-append header "(source feed #:types (Swipe))\n(define-stream s (from feed)\n (aggregate [x (sumx amount)]))\n")
+                       #rx"unknown aggregate" 5))

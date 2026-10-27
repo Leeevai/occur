@@ -16,6 +16,7 @@
                        "../private/progress.rkt"
                        "../private/window.rkt"
                        "../private/context.rkt"
+                       "../private/aggregate.rkt"
                        "../private/dataflow.rkt"
                        "../private/operator.rkt"
                        "../private/ops/stateless.rkt"
@@ -60,12 +61,28 @@
 
 ;; compile-stages : identifier (listof syntax)
 ;;                  -> (values definitions final-id shape key keying)
-(define (compile-stages name-id stages)
+(define (stage-head stx) (syntax-parse stx [(h:id . _) (syntax-e #'h)] [_ #f]))
+
+;; A window stage directly followed by an aggregate stage fuses into one
+;; windowed aggregation (§8).
+(define (fuse-stages stages)
+  (let loop ([ss stages] [acc '()])
+    (cond
+      [(null? ss) (reverse acc)]
+      [(and (pair? (cdr ss)) (eq? (stage-head (car ss)) 'window) (eq? (stage-head (cadr ss)) 'aggregate))
+       (loop (cddr ss)
+             (cons (datum->syntax (car ss) (list (datum->syntax (car ss) 'windowed-aggregate) (car ss) (cadr ss))
+                                  (car ss))
+                   acc))]
+      [else (loop (cdr ss) (cons (car ss) acc))])))
+
+(define (compile-stages name-id stages0)
+  (define stages (fuse-stages stages0))
   (define name (syntax-e name-id))
   (define n (length stages))
   (let loop ([stages stages] [i 1] [ctx (stage-ctx name #f #f #f #f)] [defs '()])
     (define stg (car stages))
-    (define head (syntax-parse stg [(h:id . _) (syntax-e #'h)] [_ #f]))
+    (define head (stage-head stg))
     (define proc (hash-ref stage-table head #f))
     (unless proc
       (raise-syntax-error 'define-stream
@@ -660,3 +677,78 @@
  (λ (stx ctx)
    (syntax-parse stx
      [(_) (stage-out* #'activations-operator #f (shape '((Activated (key . Any)))) (stage-ctx-key ctx))])))
+
+;; ===========================================================================
+;; Aggregation (spec §8)
+;;
+;; (aggregate [name (agg arg ...)] ...): after a window, one event per
+;; (key, window) with the named results; on its own, a running aggregate per
+;; key emitted after every event.
+
+(define (aggregate-form stx clause shp ctx)
+  (define (f e) (event-lambda shp e #:lexical stx))
+  (define ky (stage-ctx-keying ctx))
+  (syntax-parse clause
+    [((~datum count)) #'(count-agg)]
+    [((~datum multiplicity)) #'(multiplicity-agg)]
+    [((~datum events)) #'(events-agg)]
+    [((~datum sum) e) #`(sum-agg #,(f #'e))]
+    [((~datum min) e) #`(min-agg #,(f #'e))]
+    [((~datum max) e) #`(max-agg #,(f #'e))]
+    [((~datum avg) e) #`(avg-agg #,(f #'e))]
+    [((~datum variance) e (~optional (~and s #:sample))) #`(variance-agg #,(f #'e) #:sample? #,(and (attribute s) #t))]
+    [((~datum stddev) e (~optional (~and s #:sample))) #`(stddev-agg #,(f #'e) #:sample? #,(and (attribute s) #t))]
+    [((~datum first) e) #`(first-agg #,(f #'e))]
+    [((~datum last) e) #`(last-agg #,(f #'e))]
+    [((~datum span)) #'(span-agg)]
+    [((~datum sources) sub kind) #`(sources-agg #,(f #'sub) #,(f #'kind))]
+    [((~datum sources))
+     (define sub (and ky (hash-ref ky 'substream #f)))
+     (define kind (and ky (hash-ref ky 'kind #f)))
+     (unless (and sub kind)
+       (raise-syntax-error 'aggregate "(sources) needs a source with #:substream and #:kind, or (sources sub kind)" stx clause))
+     #`(sources-agg (attribute-key-fn '#,sub) (attribute-key-fn '#,kind))]
+    [((~datum collect) e) #`(collect-agg #,(f #'e))]
+    [((~datum argmax) e) #`(argmax-agg #,(f #'e))]
+    [((~datum argmin) e) #`(argmin-agg #,(f #'e))]
+    [((~datum median) e) #`(median-agg #,(f #'e))]
+    [((~datum percentile) e p:expr) #`(percentile-agg #,(f #'e) p)]
+    [((~datum count-distinct) e) #`(count-distinct-agg #,(f #'e))]
+    [((~datum mode) e) #`(mode-agg #,(f #'e))]
+    [((~datum top-k) e k:expr (~optional (~seq #:by (~and by (~or* (~datum value) (~datum frequency))))))
+     #`(top-k-agg #,(f #'e) k #:by '#,(if (attribute by) (syntax-e #'by) 'value))]
+    [((~datum approx-distinct) e) #`(approx-distinct-agg #,(f #'e))]
+    [((~datum approx-percentile) e p:expr) #`(approx-percentile-agg #,(f #'e) p)]
+    [((~datum approx-frequency) e x:expr) #`(approx-frequency-agg #,(f #'e) x)]
+    [((~datum count-min) e) #`(count-min-agg #,(f #'e))]
+    [_ (raise-syntax-error 'aggregate
+                           "unknown aggregate; expected count, multiplicity, events, sum, min, max, avg, variance, stddev, first, last, span, sources, collect, argmax, argmin, median, percentile, count-distinct, mode, top-k, approx-distinct, approx-percentile, approx-frequency, or count-min"
+                           stx clause)]))
+
+;; (values accumulator-expr fields)
+(define (aggregate-clauses stx agg-stx ctx)
+  (define shp (stage-ctx-shape ctx))
+  (syntax-parse agg-stx
+    [(_ [n:id clause] ...+)
+     (define dup (check-duplicates (syntax->list #'(n ...)) #:key syntax-e))
+     (when dup (raise-syntax-error 'aggregate "result name given twice" agg-stx dup))
+     (values #`(aggregate-accumulator
+                (list #,@(for/list ([n (syntax->list #'(n ...))] [c (syntax->list #'(clause ...))])
+                           #`(cons '#,n #,(aggregate-form agg-stx c shp ctx)))))
+             (append (for/list ([n (syntax->list #'(n ...))]) (cons (syntax-e n) 'Any)) '((key . Any))))]))
+
+(register-stage!
+ 'windowed-aggregate
+ (λ (stx ctx)
+   (syntax-parse stx
+     [(_ (~and w (_ spec opt ...)) agg)
+      (define-values (acc fields) (aggregate-clauses #'agg #'agg ctx))
+      (define-values (op shp) (window-spec->operator #'w #'spec #'(opt ...) ctx acc fields))
+      (stage-out* op #f shp (stage-ctx-key ctx))])))
+
+(register-stage!
+ 'aggregate
+ (λ (stx ctx)
+   (define-values (acc fields) (aggregate-clauses stx stx ctx))
+   (stage-out* #`(landmark-window-operator -inf.0 #,acc #:key #,(or (stage-ctx-key ctx) #'#f) #:type 'Aggregate)
+               #f (shape (list (cons 'Aggregate fields))) (stage-ctx-key ctx))))
