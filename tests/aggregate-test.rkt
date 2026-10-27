@@ -83,3 +83,44 @@
        (define with (fold agg (append xs ys)))
        (define without (for/fold ([s with]) ([y ys]) ((aggregator-remove agg) s y)))
        (check-equal? ((aggregator-result agg) without) ((aggregator-result agg) (fold agg xs)))))))
+
+(define (vals xs) (for/list ([x xs] [i (in-naturals)]) (ev i x)))
+
+(spec-test 'AG.collect "collect keeps every value in arrival order"
+  (check-equal? (aggregate-events (collect-agg v) (vals '(3 1 3 2))) '(3 1 3 2))
+  (check-equal? (aggregator-class (collect-agg v)) 'holistic))
+
+(spec-test '(AG.median AG.percentile) "median and nearest-rank percentiles"
+  (check-equal? (aggregate-events (median-agg v) (vals '(5 1 3))) 3)
+  (check-equal? (aggregate-events (median-agg v) (vals '(4 1 3 2))) 5/2)
+  (define xs (vals '(15 20 35 40 50)))
+  (check-equal? (aggregate-events (percentile-agg v 0.3) xs) 20)
+  (check-equal? (aggregate-events (percentile-agg v 0.4) xs) 20)
+  (check-equal? (aggregate-events (percentile-agg v 0.5) xs) 35)
+  (check-equal? (aggregate-events (percentile-agg v 1) xs) 50)
+  (check-equal? (aggregate-events (percentile-agg v 0) xs) 15)
+  (check-false (aggregate-events (percentile-agg v 0.5) '())))
+
+(spec-test '(AG.count-distinct AG.mode AG.top-k) "distinct count, mode, and top-k"
+  (define xs (vals '(3 1 3 2 1 3 9)))
+  (check-equal? (aggregate-events (count-distinct-agg v) xs) 4)
+  (check-equal? (aggregate-events (mode-agg v) xs) 3)
+  (check-equal? (aggregate-events (mode-agg v) (vals '(2 1 1 2))) 2)     ; tie: seen first
+  (check-equal? (aggregate-events (top-k-agg v 3) xs) '(9 3 3))
+  (check-equal? (aggregate-events (top-k-agg v 2 #:by 'frequency) xs) '(3 1)))
+
+(spec-test '(AG.median AG.percentile AG.count-distinct AG.mode AG.top-k AG.collect)
+           "property: holistic aggregates combine and remove exactly"
+  (check-property
+   (make-config #:tests (trials))
+   (property ([xs (gen:list (gen:integer-in 0 9) #:max-length 12)] [ys (gen:list (gen:integer-in 0 9) #:max-length 12)])
+     (define ex (vals xs))
+     (define ey (for/list ([y ys] [i (in-naturals 100)]) (ev i y)))
+     (for ([agg (list (median-agg v) (percentile-agg v 0.9) (count-distinct-agg v) (top-k-agg v 3))])
+       (check-equal? ((aggregator-result agg) ((aggregator-combine agg) (fold agg ex) (fold agg ey)))
+                     ((aggregator-result agg) (fold agg (append ex ey))))
+       (check-equal? ((aggregator-result agg) (for/fold ([s (fold agg (append ex ey))]) ([y ey]) ((aggregator-remove agg) s y)))
+                     ((aggregator-result agg) (fold agg ex))))
+     ;; the median is the 50th percentile for odd counts
+     (when (odd? (length xs))
+       (check-equal? (aggregate-events (median-agg v) ex) (aggregate-events (percentile-agg v 1/2) ex))))))

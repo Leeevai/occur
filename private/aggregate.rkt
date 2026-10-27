@@ -159,3 +159,98 @@
   [sources-agg (-> (-> event? any/c) (-> event? any/c) aggregator?)]
   [argmax-agg (-> (-> event? real?) aggregator?)]
   [argmin-agg (-> (-> event? real?) aggregator?)]))
+
+;; ===========================================================================
+;; Holistic aggregates keep all values: a multiset (value -> (count . order))
+;; where order is the arrival index of the value's first occurrence, used to
+;; break ties deterministically. Multisets support remove and combine.
+
+(struct mset (counts next) #:transparent)   ; counts: hash value -> (cons count first-order)
+(define empty-mset (mset (hash) 0))
+
+(define (mset-add m x)
+  (define old (hash-ref (mset-counts m) x #f))
+  (mset (hash-set (mset-counts m) x (if old (cons (add1 (car old)) (cdr old)) (cons 1 (mset-next m))))
+        (add1 (mset-next m))))
+(define (mset-remove m x)
+  (define old (hash-ref (mset-counts m) x #f))
+  (cond [(not old) m]
+        [(= (car old) 1) (mset (hash-remove (mset-counts m) x) (mset-next m))]
+        [else (mset (hash-set (mset-counts m) x (cons (sub1 (car old)) (cdr old))) (mset-next m))]))
+(define (mset-union a b)
+  (for/fold ([m a]) ([(x c) (in-hash (mset-counts b))])
+    (for/fold ([m m]) ([i (in-range (car c))]) (mset-add m x))))
+(define (mset-sorted m)   ; all values, ascending, with duplicates
+  (sort (for*/list ([(x c) (in-hash (mset-counts m))] [i (in-range (car c))]) x) <))
+(define (mset-by-arrival m)
+  (sort (hash->list (mset-counts m)) < #:key cddr))
+
+(define (holistic name f result)
+  (make-aggregator name 'holistic
+                   #:init (λ () empty-mset)
+                   #:add (λ (s e) (mset-add s (f e)))
+                   #:remove (λ (s e) (mset-remove s (f e)))
+                   #:combine mset-union
+                   #:result result))
+
+;; AG.collect: the list of values, in arrival order of first occurrence with
+;; repetitions kept.
+(define (collect-agg f)
+  (make-aggregator 'collect 'holistic
+                   #:init (λ () '())
+                   #:add (λ (s e) (cons (f e) s))
+                   #:remove (λ (s e) (let loop ([l (reverse s)] [acc '()])
+                                       (cond [(null? l) s]
+                                             [(equal? (car l) (f e)) (append (reverse (cdr l)) acc)]
+                                             [else (loop (cdr l) (cons (car l) acc))])))
+                   #:combine (λ (a b) (append b a))
+                   #:result reverse))
+
+;; AG.percentile by the nearest-rank method: the value at rank ⌈p·n⌉ of the
+;; sorted values (p = 0 gives the minimum). docs/decisions/0008-aggregates.md
+(define (nearest-rank sorted p)
+  (define n (length sorted))
+  (and (positive? n) (list-ref sorted (max 0 (sub1 (exact-ceiling (* p n)))))))
+
+(define (percentile-agg f p)
+  (holistic 'percentile f (λ (m) (nearest-rank (mset-sorted m) p))))
+
+;; AG.median: the middle value, or the mean of the two middle values.
+(define (median-agg f)
+  (holistic 'median f
+            (λ (m)
+              (define xs (mset-sorted m))
+              (define n (length xs))
+              (cond [(zero? n) #f]
+                    [(odd? n) (list-ref xs (quotient n 2))]
+                    [else (/ (+ (list-ref xs (sub1 (quotient n 2))) (list-ref xs (quotient n 2))) 2)]))))
+
+;; AG.count-distinct: the exact number of distinct values.
+(define (count-distinct-agg f)
+  (holistic 'count-distinct f (λ (m) (hash-count (mset-counts m)))))
+
+;; AG.mode: the most frequent value; ties go to the value seen first.
+(define (mode-agg f)
+  (holistic 'mode f
+            (λ (m)
+              (for/fold ([best #f] [best-count 0] #:result best) ([p (in-list (mset-by-arrival m))])
+                (if (> (cadr p) best-count) (values (car p) (cadr p)) (values best best-count))))))
+
+;; AG.top-k: the k largest values (with repetitions), or with #:by 'frequency
+;; the k most frequent values (ties to the value seen first).
+(define (top-k-agg f k #:by [by 'value])
+  (holistic 'top-k f
+            (λ (m)
+              (if (eq? by 'value)
+                  (take (reverse (mset-sorted m)) (min k (apply + 0 (map car (hash-values (mset-counts m))))))
+                  (map car (take (sort (mset-by-arrival m) > #:key cadr)
+                                 (min k (hash-count (mset-counts m)))))))))
+
+(provide
+ (contract-out
+  [collect-agg (-> (-> event? any/c) aggregator?)]
+  [percentile-agg (-> (-> event? real?) (real-in 0 1) aggregator?)]
+  [median-agg (-> (-> event? real?) aggregator?)]
+  [count-distinct-agg (-> (-> event? any/c) aggregator?)]
+  [mode-agg (-> (-> event? any/c) aggregator?)]
+  [top-k-agg (->* ((-> event? any/c) exact-positive-integer?) (#:by (or/c 'value 'frequency)) aggregator?)]))
