@@ -1,0 +1,4 @@
+{"kind": "rule", "id": "vibration-check", "condition": {"type": "accumulate", "count": 3, "span": 0}, "watch": ["vibration"], "target": "vibration-evaluator", "applies_to": "none"}
+{"kind": "binding", "rule": "vibration-check", "on": ["pump-1"]}
+{"kind": "rule", "id": "pressure-check", "condition": {"type": "accumulate", "count": 1, "span": 0}, "target": "elsewhere"}
+{"kind": "binding", "rule": "flow-check", "on": ["pump-2"]}
