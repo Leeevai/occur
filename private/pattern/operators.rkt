@@ -60,3 +60,31 @@
   [reference-pattern-operator (->* (pat?) (#:key (or/c #f (-> event? any/c)) #:derive (-> pmatch? event?)
                                           #:horizon (or/c #f time?))
                                    operator?)]))
+
+;; ---------------------------------------------------------------------------
+;; The pattern operator used by #lang occur. The reference engine implements
+;; the most permissive semantics (SEL.any, CON.unrestricted, OUT.every,
+;; SKIP.no-skip, EVAL.deferred); other policies need the incremental engine.
+
+(define default-policies
+  (hasheq 'selection 'any 'consumption 'unrestricted 'output 'every 'skip 'no-skip 'eval 'deferred))
+
+(define (pattern-operator p #:key [key #f] #:derive [derive (λ (m) (derive-match m))]
+                          #:policies [policies (hasheq)] #:engine [engine 'reference])
+  (define ps (for/fold ([h default-policies]) ([(k v) (in-hash policies)]) (hash-set h k v)))
+  (case engine
+    [(reference)
+     (for ([(k v) (in-hash ps)])
+       (unless (equal? v (hash-ref default-policies k))
+         (raise-arguments-error 'pattern-operator
+                                "the reference engine implements only the most permissive semantics; use the incremental engine"
+                                "policy" k "value" v)))
+     (reference-pattern-operator p #:key key #:derive derive)]
+    [else (raise-arguments-error 'pattern-operator "unknown engine" "engine" engine)]))
+
+(provide
+ (contract-out
+  [default-policies hash?]
+  [pattern-operator (->* (pat?) (#:key (or/c #f (-> event? any/c)) #:derive (-> pmatch? event?)
+                                 #:policies hash? #:engine symbol?)
+                         operator?)]))
