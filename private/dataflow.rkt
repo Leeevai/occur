@@ -224,6 +224,7 @@
                 [counters #:mutable]     ; hasheq node -> hash name -> n
                 [reports #:mutable]      ; reversed list of (node . datum)
                 [prov #:mutable]         ; hasheq node -> hash id -> list of events
+                [retracted #:mutable]    ; hasheq node -> hash of the ids retracted at its inputs
                 [ids #:mutable]          ; box holding the id counter
                 [outputs #:mutable]      ; reversed list of output
                 [outbox #:mutable]       ; reversed list of output awaiting delivery
@@ -247,7 +248,7 @@
 (define (make-runner prog start delivery track-provenance?)
   (runner prog start (initial-states prog) empty-deadlines
           (for/hasheq ([name (in-hash-keys (program-nodes prog))]) (values name empty-deadlines))
-          (hasheq) (hasheq) (hasheq) '() (hasheq) (box 0) '() '() #f (hasheq)
+          (hasheq) (hasheq) (hasheq) '() (hasheq) (hasheq) (box 0) '() '() #f (hasheq)
           '() #f #f #f #f '() '() #f delivery track-provenance?))
 
 (define (W r name) (hash-ref (runner-wm r) name -inf.0))
@@ -335,6 +336,15 @@
                         (add idx (event-id c))))
                     (hash)))))
 
+;; Whether e, or an event in its provenance (∈*), was retracted at the inputs
+;; of node `name`.
+(define (retracted-under? r name e)
+  (define ids (hash-ref (runner-retracted r) name #f))
+  (and ids
+       (let loop ([e e])
+         (or (hash-ref ids (event-id e) #f)
+             (for/or ([c (in-list (event-constituents e))]) (and (event? c) (loop c)))))))
+
 ;; Deliver the emissions of node `name` (made under partition `key`).
 ;; During a replay, the events of a node that judges or coalesces its own
 ;; outputs (the rules node) are held at the node, so that they are released
@@ -345,6 +355,10 @@
   (define prog (runner-program r))
   (define op (node-op* r name))
   (for ([pe (in-list emissions)]
+        ;; DR.retract: an event derived from one this node has seen retracted
+        ;; is retracted too, so it is never emitted
+        #:unless (and (event? (cdr pe)) (retracted-under? r name (cdr pe))
+                      (begin (bump-counters! r name (list (cons 'retracted 1))) #t))
         #:unless (and (runner-holding? r) (event? (cdr pe)) (holds-emissions? op)
                       (begin (set-runner-held-emissions! r (cons (vector name key (car pe) (cdr pe))
                                                                  (runner-held-emissions r)))
@@ -374,6 +388,7 @@
         (key-callback! r name key (λ (g s c) ((operator-on-event op) g s e c)) #:port port #:seq seq)
         (fire-event-timers! r name)])]
     [(retraction e)
+     (set-runner-retracted! r (hash-update (runner-retracted r) name (λ (ids) (hash-set ids (event-id e) #t)) (hash)))
      (cond
        [(operator-on-retract op)
         (define key (if (operator-key op) ((operator-key op) e) #f))
@@ -553,13 +568,13 @@
 ;; ===========================================================================
 ;; TM.checkpoint and TM.replay
 
-(struct snap (now states pdl edl wm maxte counters prov ids outbox seqs suspended? position) #:transparent)
+(struct snap (now states pdl edl wm maxte counters prov retracted ids outbox seqs suspended? position) #:transparent)
 
 (define (take-snapshot! r)
   (flush-outbox! r)
   (set-runner-snapshot!
    r (snap (runner-now r) (runner-states r) (runner-pdl r) (runner-edl r) (runner-wm r) (runner-maxte r)
-           (runner-counters r) (runner-prov r) (unbox (runner-ids r)) (runner-outbox r) (runner-seqs r)
+           (runner-counters r) (runner-prov r) (runner-retracted r) (unbox (runner-ids r)) (runner-outbox r) (runner-seqs r)
            (runner-suspended? r) (length (runner-log r)))))
 
 ;; Restore the snapshot, then re-read the input retained since it.
@@ -569,6 +584,7 @@
   (set-runner-now! r (snap-now sn)) (set-runner-states! r (snap-states sn)) (set-runner-pdl! r (snap-pdl sn))
   (set-runner-edl! r (snap-edl sn)) (set-runner-wm! r (snap-wm sn)) (set-runner-maxte! r (snap-maxte sn))
   (set-runner-counters! r (snap-counters sn)) (set-runner-prov! r (snap-prov sn))
+  (set-runner-retracted! r (snap-retracted sn))
   (set-box! (runner-ids r) (snap-ids sn)) (set-runner-outbox! r (snap-outbox sn)) (set-runner-seqs! r (snap-seqs sn))
   (set-runner-suspended?! r (snap-suspended? sn))
   (define since (reverse (take (runner-log r) (- (length (runner-log r)) (snap-position sn)))))
@@ -584,6 +600,7 @@
   (set-runner-states! r (initial-states prog)) (set-runner-pdl! r empty-deadlines)
   (set-runner-edl! r (for/hasheq ([name (in-hash-keys (program-nodes prog))]) (values name empty-deadlines)))
   (set-runner-wm! r (hasheq)) (set-runner-maxte! r (hasheq)) (set-runner-prov! r (hasheq)) (set-runner-seqs! r (hasheq))
+  (set-runner-retracted! r (hasheq))
   (set-runner-outbox! r '()) (set-runner-suspended?! r #f)
   (set-runner-holding?! r #t)
   (set-runner-frozen?! r #t)

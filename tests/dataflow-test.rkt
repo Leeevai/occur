@@ -249,3 +249,19 @@
   (define n (make-node 'later op (list src) #:sink? #t))
   (check-equal? (ats (run (make-program (list n)) (list (arrive 5 'in (ev "a" 5)) (arrive 9 'in (ev "b" 9))))) '(5 9))
   (check-equal? (ats (run (make-program (list n)) (list (arrive 5 'in (ev "a" 5))))) '(5)))
+
+(require (only-in "../private/progress.rkt" delay-operator)
+         (only-in "../private/window.rkt" grid-window-operator tumbling contents-accumulator))
+
+(spec-test '(DR.retract TM.retraction TM.timer) "an event retracted while an operator holds it is never emitted"
+  (define s (make-source 'in #:watermark 'ascending))
+  (define held (make-node 'held (delay-operator 10) (list s) #:sink? #t))
+  (define win (make-node 'win (grid-window-operator (tumbling 100) contents-accumulator) (list s) #:sink? #t))
+  (define r (run (make-program (list held win))
+                 (list (arrive 1 'in (make-event 'X '() #:id "a" #:at 1))
+                       (arrive 2 'in (make-event 'X '() #:id "b" #:at 2))
+                       (arrive 3 'in (retraction (make-event 'X '() #:id "a" #:at 1))))))
+  ;; the delay releases only b; the window that held a is retracted with it
+  (check-equal? (map event-id (run-result-events r 'held)) '("b"))
+  (check-equal? (run-result-events r 'win) '())
+  (check-equal? (list (run-result-counter r 'held 'retracted) (run-result-counter r 'win 'retracted)) '(1 1)))
