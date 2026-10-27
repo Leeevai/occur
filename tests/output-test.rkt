@@ -46,3 +46,18 @@
                           (arrive 5 'in (st "s3" 5 'silent)))))
   (check-equal? (map event-id (run-result-events r)) '("s1" "l1" "s3"))
   (check-equal? (run-result-counter r 'op 'persisting) 2))
+
+(require rackcheck)
+
+(spec-test 'OUT.rate-limit "property: a deferring rate limit never loses a contribution and keeps its cap"
+  (check-property
+   (make-config #:tests (trials))
+   (property ([gaps (gen:list (gen:integer-in 0 40) #:max-length 15)] [ns (gen:list (gen:integer-in 0 5) #:max-length 15)]
+              [cap (gen:integer-in 1 60)])
+     (define times (let loop ([gs gaps] [t 0] [acc '()]) (if (null? gs) (reverse acc) (loop (cdr gs) (+ t (car gs)) (cons (+ t (car gs)) acc)))))
+     (define es (for/list ([t times] [n (in-cycle (if (null? ns) '(1) ns))] [i (in-naturals)]) (ev (format "e~a" i) t #:n n)))
+     (define r (run-op (rate-limit-operator cap #:mode 'defer)
+                       (append (for/list ([e es]) (arrive (event-ts e) 'in e)) (list (advance-to 100000)))))
+     (check-equal? (apply + (map event-n (run-result-events r))) (apply + (map event-n es)))
+     (define ats (map output-at (run-result-outputs r)))
+     (for ([a ats] [b (if (null? ats) '() (cdr ats))]) (check-true (>= (- b a) cap))))))
