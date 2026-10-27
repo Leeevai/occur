@@ -369,3 +369,32 @@
                                    (#:key (or/c #f (-> event? any/c)) #:timeout (or/c #f duration?)
                                     #:timeout-clock (or/c 'event-time 'processing-time) #:type symbol?)
                                    operator?)]))
+
+;; ===========================================================================
+;; WN.since-last: per operator instance, the window opens at the first event
+;; after the previous output and closes when the instance fires: when
+;; `fire?` holds for the accumulated result. The operator's own output is the
+;; punctuation. ts and te are the minimum and maximum over the contents.
+
+(define (since-last-window-operator fire? acc #:key [key #f] #:type [type 'Window])
+  (make-operator
+   'since-last-window
+   #:key key
+   #:init-key (λ (gl k c) (cons ((accumulator-init acc)) '()))
+   #:on-event
+   (λ (gl st e c)
+     (define a ((accumulator-add acc) (car st) e))
+     (define contents (cons e (cdr st)))
+     (cond
+       [(fire? ((accumulator-result acc) a))
+        (define cs (reverse contents))
+        (emit! c (window-output type (ctx-key c) (apply time-min (map event-ts cs))
+                                (apply time-max (map event-te cs)) acc a cs))
+        (cons ((accumulator-init acc)) '())]
+       [else (cons a contents)]))))
+
+(provide
+ (contract-out
+  [since-last-window-operator (->* ((-> hash? any/c) accumulator?)
+                                   (#:key (or/c #f (-> event? any/c)) #:type symbol?)
+                                   operator?)]))

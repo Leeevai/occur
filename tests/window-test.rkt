@@ -158,3 +158,9 @@
   (check-equal? (map event-id (event-constituents (car (run-result-events r))))
                 '("start10" "work20" "work30" "end40"))
   (check-equal? (run-result-counter r 'w 'outside) 1))
+
+(spec-test 'WN.since-last "a since-last window closes when the instance fires and reopens after"
+  (define op (since-last-window-operator (λ (res) (>= (hash-ref res 'count) 3)) contents-accumulator))
+  (define r (run-window op (for/list ([t '(0 10 20 25 40 50)] [n '(1 1 1 2 1 1)] [i (in-naturals)])
+                             (arrive t 'in (pt (format "e~a" i) t #:n n)))))
+  (check-equal? (wins r) '((0 20 3) (25 40 3))))
