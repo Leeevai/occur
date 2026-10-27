@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-27
+
+The first release: every concept of the specification, from the event
+space to rules as data, in the runtime and in `#lang occur`, tested and
+documented; the card-testing acceptance of §15; and Reflex (§16) as a
+library written in occur, reproducing traces R1–R6 exactly.
+
 ### Added
 
 - Repository skeleton: license, package metadata, the verbatim specification,
@@ -137,3 +144,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   event-less match under maximal output, are held until the end of the
   stream instead of being reported before an extension could arrive;
   `define-pattern` warns about such patterns.
+
+[Unreleased]: https://github.com/Leeevai/occur/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Leeevai/occur/releases/tag/v0.1.0
