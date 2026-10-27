@@ -150,3 +150,51 @@
 (provide
  (contract-out
   [reorder-operator (->* () (#:key (or/c #f (-> event? any/c)) #:late (or/c 'drop 'emit)) operator?)]))
+
+;; ---------------------------------------------------------------------------
+;; ST.throttle: emit at most r events per Δ, or every n-th event, or each
+;; event with probability p. Excess events are dropped and counted (compare
+;; OUT.rate-limit, which defers instead). Rate buckets are aligned to the
+;; epoch: [kΔ, (k+1)Δ). The sampling generator is a 48-bit linear
+;; congruential generator kept in the state, so runs are reproducible.
+
+(define lcg-a 25214903917)
+(define lcg-c 11)
+(define lcg-m (expt 2 48))
+(define (lcg-next x) (modulo (+ (* lcg-a x) lcg-c) lcg-m))
+
+(define (throttle-operator mode #:key [key #f])
+  (define (decide s e c)
+    (case (car mode)
+      [(rate)
+       (define r (list-ref mode 1))
+       (define Δ (list-ref mode 2))
+       (define clock (if (> (length mode) 3) (list-ref mode 3) 'event-time))
+       (define t (if (eq? clock 'processing-time) (ctx-now c) (event-te e)))
+       (define bucket (floor (/ t Δ)))
+       (define used (if (and s (equal? (car s) bucket)) (cdr s) 0))
+       (values (< used r) (cons bucket (if (< used r) (add1 used) used)))]
+      [(every)
+       (define i (add1 (or s 0)))
+       (values (zero? (modulo i (list-ref mode 1))) i)]
+      [(probability)
+       (define x (lcg-next (or s (list-ref mode 2))))
+       (values (< (/ x lcg-m) (list-ref mode 1)) x)]))
+  (make-operator
+   'throttle
+   #:key key
+   #:on-event (λ (g s e c)
+                (define-values (keep? s2) (decide s e c))
+                (if keep? (emit! c e) (count! c 'throttled))
+                s2)))
+
+(define throttle-mode/c
+  (or/c (list/c 'rate exact-positive-integer? (and/c real? positive?))
+        (list/c 'rate exact-positive-integer? (and/c real? positive?) (or/c 'event-time 'processing-time))
+        (list/c 'every exact-positive-integer?)
+        (list/c 'probability (real-in 0 1) exact-nonnegative-integer?)))
+
+(provide
+ throttle-mode/c
+ (contract-out
+  [throttle-operator (->* (throttle-mode/c) (#:key (or/c #f (-> event? any/c))) operator?)]))

@@ -125,3 +125,31 @@
                                                   #:arrivals (list (for/list ([i (length es)]) i)))))
      (check-equal? (map event-te out) (sort (map event-te es) <))
      (check-equal? (length out) (length es)))))
+
+(define ticks (for/list ([i 10]) (ev (format "e~a" i) i)))
+
+(spec-test 'ST.throttle "at most r events per Δ, aligned buckets"
+  (define r (run-operator (throttle-operator '(rate 2 5)) (list ticks)))
+  (check-equal? (ids (run-result-events r)) '("e0" "e1" "e5" "e6"))
+  (check-equal? (run-result-counter r 'op 'throttled) 6))
+
+(spec-test 'ST.throttle "every n-th event"
+  (check-equal? (ids (run-result-events (run-operator (throttle-operator '(every 3)) (list ticks))))
+                '("e2" "e5" "e8")))
+
+(spec-test 'ST.throttle "sampling with probability p is reproducible from its seed"
+  (define (sample seed) (ids (run-result-events (run-operator (throttle-operator `(probability 1/2 ,seed))
+                                                              (list ticks)))))
+  (check-equal? (sample 7) (sample 7))
+  (check-equal? (ids (run-result-events (run-operator (throttle-operator '(probability 1 7)) (list ticks))))
+                (ids ticks))
+  (check-equal? (run-result-events (run-operator (throttle-operator '(probability 0 7)) (list ticks))) '()))
+
+(spec-test 'ST.throttle "property: a rate throttle never exceeds r per bucket"
+  (check-property
+   (make-config #:tests (trials))
+   (property ([ts (gen:list (gen:integer-in 0 60) #:max-length 20)] [r (gen:integer-in 1 3)])
+     (define es (for/list ([t (sort ts <)] [i (in-naturals)]) (ev (format "e~a" i) t)))
+     (define out (run-result-events (run-operator (throttle-operator `(rate ,r 10)) (list es))))
+     (for ([b (remove-duplicates (map (λ (e) (quotient (event-te e) 10)) out))])
+       (check-true (<= (length (filter (λ (e) (= b (quotient (event-te e) 10))) out)) r))))))
