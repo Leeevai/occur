@@ -257,3 +257,20 @@
                (dedupe (for*/list ([a (in-list level)] [b (in-list one)] #:when (< (pmatch-te a) (pmatch-ts b)))
                          (pmatch-union ctx a b #:pred (pred-of ctx a))))
                acc2)))))
+
+;; ===========================================================================
+;; PT.any (k-of-n):
+;;   ⟦ANY(k; P₁, …, Pₙ)⟧ = { m_{i₁} ∪ … ∪ m_{iₖ} : i₁ < … < iₖ, pairwise disjoint }
+;; ANY(n; …) is the conjunction of all the patterns, ANY(1; …) their
+;; disjunction.
+
+(register!
+ p:any?
+ (λ (ctx p denote)
+   (define parts (map denote (p:any-parts p)))
+   (for*/list ([combo (in-list (combinations parts (p:any-k p)))]
+               [ms (in-list (apply cartesian-product combo))]
+               #:when (for*/and ([(x i) (in-indexed ms)] [(y j) (in-indexed ms)] #:when (< i j)) (disjoint? x y)))
+     (for/fold ([acc (car ms)]) ([m (in-list (cdr ms))]) (pmatch-union ctx acc m)))))
+
+(define (in-indexed l) (in-parallel (in-list l) (in-naturals)))

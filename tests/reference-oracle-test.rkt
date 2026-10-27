@@ -102,3 +102,9 @@
   (check-equal? (sort (map length (map pmatch-events (denote (repeat B 2 3) Hb))) <) '(2 2 2 2 2 2 3 3 3 3))
   (check-equal? (length (denote (repeat B 3) Hb)) 4)
   (check-equal? (length (denote (repeat B 1 +inf.0) Hb)) 15))
+
+(spec-test 'PT.any "ANY(k; …) takes k of the n patterns, pairwise disjoint"
+  (define ms (denote (any-of 2 A B C) H))
+  (check-equal? (length ms) (+ 4 2 2))         ; A∧B: 4, A∧C: 2, B∧C: 2
+  (check-equal? (map pmatch-key (denote (any-of 1 A C) H)) (map pmatch-key (denote (disj A C) H)))
+  (check-equal? (map pmatch-key (denote (any-of 2 A B) H)) (map pmatch-key (denote (conj A B) H))))
