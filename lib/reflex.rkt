@@ -8,7 +8,7 @@
 ;; (tests/reflex-purity.rkt checks the first).
 (provide DataArrival SensorData Trigger
          sensor-write
-         accumulate)
+         accumulate window)
 
 ;; ---------------------------------------------------------------------------
 ;; §16.1 Inputs
@@ -43,6 +43,14 @@
 ;; both.
 (define-condition accumulate #:as pt:accumulate
   #:rename ([#:min-samples #:count] [#:min-span-s #:span]))
+
+;; window(w, o, all?) = PT.window-close: WN.tumbling(w, o) anchored at the
+;; first contribution, closed by TM.keyed-watermark (mode all when
+;; require_all, else any), the windows that closed together coalesced into
+;; one output (OUT.coalesce).
+(define-condition window #:as pt:window-close
+  #:rename ([#:window-s #:size] [#:offset-s #:offset]
+            [#:require-all #:mode (λ (all?) (if all? 'all 'any))]))
 
 ;; ---------------------------------------------------------------------------
 ;; §16.3 Outputs
