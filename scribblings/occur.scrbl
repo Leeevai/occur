@@ -32,3 +32,4 @@ time.
 @include-section["operations.scrbl"]
 @include-section["structure.scrbl"]
 @include-section["progress.scrbl"]
+@include-section["windows.scrbl"]
