@@ -21,7 +21,9 @@ private/                    runtime library (plain Racket, contracts on every ex
 syntax/                     expander: syntax-parse forms for #lang occur
 lib/reflex.rkt              the Reflex vocabulary, written in occur's public forms only
 tests/                      rackunit and rackcheck tests, mirroring private/
-examples/                   runnable #lang occur programs plus data/
+  lang/                     #lang occur fixtures for the surface tests
+examples/                   runnable #lang occur programs and their data
+  reflex/                   Reflex programs: traces R1–R6, fleet, health, recovery
 scribblings/occur.scrbl     the manual
 docs/                       spec.md, coverage.md, reflex.md, decisions/NNNN-title.md
 ```
@@ -66,7 +68,13 @@ The package is installed as a link: `raco pkg install --auto --batch --link --na
 
 - Tag tests with spec IDs: `(spec-test 'PT.sequence "description" body ...)`
   from `tests/util.rkt`.
-- `tests/coverage.rkt` fails if any ID in `docs/coverage.md` lacks a tagged test.
+- `tests/coverage.rkt` fails if any ID in `docs/coverage.md` lacks a tagged
+  test, if a row's Tests cell is not exactly the files tagged with its ID,
+  or if a `done` row lacks a surface form, runtime function, or example.
+- A `#lang occur` module that declares nothing to run is a library and
+  exports only what it provides; a program also exports `occur-program`,
+  `occur-steps`, and `occur-run`. Tests read a program's run from outside
+  the module (code inside the module cannot name its own `occur-run`).
 - `tests/reflex-purity.rkt` fails if `lib/reflex.rkt` or `examples/reflex/`
   requires a `private/` module.
 - Property tests use rackcheck; `OCCUR_TRIALS` overrides the trial count.
