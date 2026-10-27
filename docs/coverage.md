@@ -11,21 +11,21 @@ Status values: `todo`, `partial`, `done`.
 
 | ID | § | Surface form | Runtime function | Tests | Example | Status |
 |---|---|---|---|---|---|---|
-| `ES.time` | §2 | (M2) durations: `seconds` `minutes` `hours` | `time?` `interval` `utc` (private/time.rkt) | tests/time-test.rkt |  | partial |
-| `ES.type` | §2 | (M2) `event-type` | `make-event-type` `payload-problem` (private/event.rkt) | tests/event-test.rkt |  | partial |
-| `ES.event` | §2 | (M2) `source` data | `make-event` `event-attr` (private/event.rkt) | tests/event-test.rkt |  | partial |
+| `ES.time` | §2 | `seconds` `minutes` `hours` `days` `utc` (available in `#lang occur`) | `time?` `interval` `utc` (private/time.rkt) | tests/time-test.rkt |  | partial |
+| `ES.type` | §2 | `(event-type T [a : D] ...)` | `make-event-type` `payload-problem` (private/event.rkt) | tests/event-test.rkt, tests/lang-test.rkt |  | partial |
+| `ES.event` | §2 | `(T #:at t [a v] ...)` constructor | `make-event` `event-attr` (private/event.rkt) | tests/event-test.rkt, tests/lang-test.rkt |  | partial |
 | `ES.batch` | §2 | (M2) `#:n` in source data | `make-batch-event` `batch-share` (private/event.rkt) | tests/batch-test.rkt |  | partial |
 | `ES.reference` | §2 | (M2) | `make-reference-event` `store-read` (private/event.rkt) | tests/reference-test.rkt |  | partial |
 | `ES.composite` | §2 | (M10) `#:emit` | `make-composite` (private/event.rkt) | tests/composite-test.rkt |  | partial |
-| `ES.space` | §2 | (M2) compile-time schema checks | `event-space-member?` `event-level` (private/event.rkt) | tests/space-test.rkt |  | partial |
+| `ES.space` | §2 | compile-time schema checks in `event-type`, `source`, constructors | `event-space-member?` `event-level` (private/event.rkt) | tests/space-test.rkt, tests/lang-test.rkt |  | partial |
 | `ES.precedes` | §2 | (M9) `(precedes a b)` in `#:where` | `precedes?` (private/relations.rkt) | tests/relations-test.rkt |  | partial |
 | `ES.membership` | §2 | (M13) | `constituent-of?` `provenance` `member*?` (private/relations.rkt) | tests/relations-test.rkt |  | partial |
 | `ES.causality` | §2 | (M13) | `causality-from-events` `causes?` (private/relations.rkt) | tests/relations-test.rkt |  | partial |
-| `ES.stream` | §2 | (M2) `source` | `make-event-stream` (private/stream.rkt) | tests/stream-test.rkt |  | partial |
+| `ES.stream` | §2 | `(source s #:types (T ...) #:from ...)` | `make-event-stream` (private/stream.rkt) | tests/stream-test.rkt, tests/io-test.rkt, tests/lang-test.rkt |  | partial |
 | `ES.history` | §2 | (M2) | `history` (private/stream.rkt) | tests/stream-test.rkt |  | partial |
 | `ES.keyed` | §2 | (M4) `(key-by attr)` | `partition-stream` (private/stream.rkt) | tests/stream-test.rkt |  | partial |
 | `ES.substream` | §2 | (M4) `#:key` `#:substream` `#:kind` | `attribute-keying` `watching` (private/stream.rkt) | tests/stream-test.rkt |  | partial |
-| `ES.operator` | §2 | | | | | todo |
+| `ES.operator` | §2 | `define-stream` stages compile to operators | `make-operator` `run-operator` (private/operator.rkt, private/dataflow.rkt) | tests/operator-test.rkt, tests/dataflow-test.rkt |  | partial |
 | `OP.filter` | §4 | | | | | todo |
 | `OP.project` | §4 | | | | | todo |
 | `OP.map` | §4 | | | | | todo |
@@ -42,13 +42,13 @@ Status values: `todo`, `partial`, `done`.
 | `TM.lateness` | §6 | | | | | todo |
 | `TM.keyed-watermark` | §6 | | | | | todo |
 | `TM.event-time` | §6 | | | | | todo |
-| `TM.processing-time` | §6 | | | | | todo |
-| `TM.watermark` | §6 | | | | | todo |
+| `TM.processing-time` | §6 | `(script ...)` steps | `run` with `simulated-clock` (private/dataflow.rkt) | tests/lang-test.rkt |  | partial |
+| `TM.watermark` | §6 | `#:watermark ascending` / `(bounded-delay d)` on `source` | `watermark-to`, source strategies (private/dataflow.rkt) | tests/dataflow-test.rkt |  | partial |
 | `TM.idle` | §6 | | | | | todo |
 | `TM.skew-guard` | §6 | | | | | todo |
-| `TM.timer` | §6 | | | | | todo |
+| `TM.timer` | §6 | (M5) | operator `#:deadline` / `#:event-deadline` (private/dataflow.rkt) | tests/dataflow-test.rkt |  | partial |
 | `TM.schedule` | §6 | | | | | todo |
-| `TM.retraction` | §6 | | | | | todo |
+| `TM.retraction` | §6 | (M5) | `retraction` items, provenance propagation (private/dataflow.rkt) | tests/dataflow-test.rkt |  | partial |
 | `TM.checkpoint` | §6 | | | | | todo |
 | `TM.replay` | §6 | | | | | todo |
 | `WN.tumbling` | §7 | | | | | todo |
@@ -172,7 +172,7 @@ Status values: `todo`, `partial`, `done`.
 | `DR.derive` | §13 | | | | | todo |
 | `DR.ordered` | §13 | | | | | todo |
 | `DR.closure` | §13 | | | | | todo |
-| `DR.cycle-guard` | §13 | | | | | todo |
+| `DR.cycle-guard` | §13 | (M13) | `make-program` cycle check (private/dataflow.rkt) | tests/dataflow-test.rkt |  | partial |
 | `DR.act` | §13 | | | | | todo |
 | `DR.retract` | §13 | | | | | todo |
 | `RL.rejudge` | §14 | | | | | todo |
