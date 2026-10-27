@@ -52,7 +52,7 @@ A @racket[source] may declare @racket[#:key], @racket[#:substream], and
 @racket[#:merge high-water-mark], which makes every stream that reads the
 source see the merged contributions.
 
-@section{Runtime}
+@section[#:tag "structure-runtime"]{Runtime}
 
 @defproc[(merge-operator [n exact-positive-integer?]) operator?]{}
 @defproc[(key-by-operator [κ (-> event? any/c)]) operator?]{}

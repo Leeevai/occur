@@ -119,7 +119,7 @@ instead, once the stream is complete: it applies every selection strategy
 with every or maximal output, under unrestricted consumption and no
 skipping.
 
-@section{Runtime}
+@section[#:tag "patterns-runtime"]{Runtime}
 
 @defproc[(denote [p pat?] [history (listof event?)] [#:activation t0 (or/c #f time?) #f]
                  [#:horizon h (or/c #f time?) #f])

@@ -54,7 +54,7 @@ example @racket[(hash-ref (data-ref-summary ref) 'newest)].}
 @tt{OP.route}: Sᵢ = σ_{pᵢ}(S). The last stage of a stream; each branch is
 declared as a stream of its own.}
 
-@section{Runtime}
+@section[#:tag "operations-runtime"]{Runtime}
 
 @defproc[(filter-operator [pred (-> event? any/c)]) operator?]{}
 @defproc[(project-operator [attrs (listof symbol?)] [#:type type (or/c #f symbol?) #f]) operator?]{}

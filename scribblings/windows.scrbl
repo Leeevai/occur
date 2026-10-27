@@ -77,7 +77,7 @@ push changes with @racket[(directory-push name entries #:mode 'patch)].}
 @specform[(activations)]{A stream of @tt{Activated} events, one per
 activation signal.}
 
-@section{Runtime}
+@section[#:tag "windows-runtime"]{Runtime}
 
 @defproc[(grid-window-operator [g grid?] [acc accumulator?] [#:key key any/c #f]
                                [#:assign assign (or/c 'start 'end 'overlap) 'start]
