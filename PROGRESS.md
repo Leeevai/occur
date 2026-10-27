@@ -12,7 +12,7 @@ This file is the resume point for work on occur. Read it, together with
 | M3 | Single-event operations | §4 | done |
 | M4 | Stream structure, including high-water-mark merging | §5 | done |
 | M5 | Time and progress | §6 | done (TM.checkpoint and TM.replay come with M15) |
-| M6 | Windows and contexts | §7 | todo |
+| M6 | Windows and contexts | §7 | done |
 | M7 | Aggregation | §8 | todo |
 | M8 | Joins | §9 | todo |
 | M9 | Allen relations | §10 | todo |
@@ -29,11 +29,13 @@ This file is the resume point for work on occur. Read it, together with
 
 ## Next step
 
-M6: windows and contexts in `private/window.rkt` and `private/context.rkt`:
-tumbling, sliding, session, count, landmark, punctuated, since-last, and
-calendar windows; empty windows; window firing with allowed lateness and
-keyed watermarks; temporal, segmentation, spatial, state, entity-lifecycle,
-activation, and composite contexts; with surface stages.
+M7: aggregation in `private/aggregate.rkt`: distributive, algebraic and
+holistic aggregates as accumulators (count as multiplicity, events, sum,
+min/max, avg, variance, first/last, span, sources, collect, argmax/argmin,
+median, percentile, count-distinct, mode, top-k), sketches (HyperLogLog,
+t-digest, Count-Min), incremental and invertible maintenance for sliding
+windows, and the `(aggregate [name (agg ...)] ...)` stage fused with a
+preceding `(window ...)`.
 
 Notes:
 - Hosted CI runs are blocked by the account's GitHub billing; every commit
