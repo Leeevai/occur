@@ -11,7 +11,7 @@ This file is the resume point for work on occur. Read it, together with
 | M2 | `#lang occur` skeleton and scripted runner | §2, §6 | done |
 | M3 | Single-event operations | §4 | done |
 | M4 | Stream structure, including high-water-mark merging | §5 | done |
-| M5 | Time and progress | §6 | done (TM.checkpoint and TM.replay come with M15) |
+| M5 | Time and progress | §6 | done (TM.checkpoint and TM.replay came with M15) |
 | M6 | Windows and contexts | §7 | done |
 | M7 | Aggregation | §8 | done |
 | M8 | Joins | §9 | done |
@@ -21,7 +21,7 @@ This file is the resume point for work on occur. Read it, together with
 | M12 | Selection, consumption, output, skip, and evaluation policies | §12 | done |
 | M13 | Derivation | §13 | done |
 | M14 | Rules as data | §14 | done |
-| M15 | Checkpoint, restore, and replay | §6 | todo |
+| M15 | Checkpoint, restore, and replay | §6 | done |
 | M16 | Acceptance: card testing | §15 | todo |
 | M17 | Acceptance: Reflex | §16 | todo |
 | M18 | Examples, Scribble docs, README, full coverage | all | todo |
@@ -29,11 +29,13 @@ This file is the resume point for work on occur. Read it, together with
 
 ## Next step
 
-M15: checkpoint and restore (TM.checkpoint) and cold-start replay with
-held-back, coalesced, re-judged output (TM.replay) in
-`private/checkpoint.rkt` and the runner, with the property that
-checkpoint, restore, then continue gives the uninterrupted run's outputs
-apart from repeats that downstream deduplication removes.
+M16: the card-testing acceptance of §15 as `examples/card-testing.rkt`
+(with its traces as JSON Lines data) and `tests/card-testing-test.rkt`:
+trace A's table for every selection strategy under every and maximal
+output, the derived SuspectedFraud(c1, 2, 1500) with ts 1, te 4, and
+C = {e1, e2, e4} emitted once the watermark passes 11 minutes; trace A′
+with ¬Verified scoped to the gap and `unless Verified` over the span;
+trace B with no match under any strategy; engine and oracle agree.
 
 Notes:
 - Hosted CI runs are blocked by the account's GitHub billing; every commit
