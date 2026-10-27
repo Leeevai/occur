@@ -538,3 +538,10 @@
   (define r (run-options-run))
   (check-equal? (length (by-node r 'all-readings)) 2)
   (check-equal? (map (λ (e) (event-attr e 'first)) (by-node r 'hourly)) (list (utc 2026 1 5 11 0) (utc 2026 1 5 12 0))))
+
+(require (only-in "lang/side-output.rkt" [occur-run side-output-run]))
+
+(spec-test '(TM.lateness) "a stage that is not the last can still declare a side stream"
+  (define r (side-output-run))
+  (check-equal? (map event-id (by-node r 'on-time)) '("a" "b"))
+  (check-equal? (map event-id (by-node r 'late-swipes)) '("late")))

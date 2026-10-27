@@ -118,7 +118,8 @@
     (if last?
         (values (append (reverse (cons def defs)) extras) node-id (stage-out-shape out)
                 (stage-ctx-key ctx2) (stage-ctx-keying ctx2))
-        (loop (cdr stages) (add1 i) ctx2 (cons def defs)))))
+        ;; a stage's extra definitions (its side streams) follow its node
+        (loop (cdr stages) (add1 i) ctx2 (append (reverse extras) (cons def defs))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Stage expressions see the attributes of the current event as variables
