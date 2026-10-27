@@ -123,3 +123,17 @@
   (check-equal? (for/list ([o (run-result-outputs r)] #:when (eq? (output-node o) 'rules))
                   (list (output-at o) (event-attr (output-item o) 'reason)))
                 '((130 silence))))
+
+(spec-test '(TM.replay OUT.coalesce) "held outputs coalesce per instance, not per key: two rules on one device stay apart"
+  (define two (list (make-rule "a" #:condition (condition 'accumulate (hasheq 'count 1 'span 0)))
+                    (make-rule "b" #:condition (condition 'accumulate (hasheq 'count 1 'span 0)))))
+  (define steps (list (push-rules two)
+                      (arrive 10 'in (contrib "d1" 10 10 1)) (arrive 20 'in (contrib "d1" 20 20 1))
+                      (cold-start)
+                      (push-rules two)))
+  (define r (run (program) steps #:final-watermark? #f))
+  (define released
+    (for/list ([o (run-result-outputs r)] #:when (and (eq? (output-node o) 'rules) (= (output-at o) 20)
+                                                      (event-attr/default (output-item o) 'merged #f)))
+      (list (event-attr (output-item o) 'rule) (event-attr (output-item o) 'merged) (event-attr (output-item o) 'samples))))
+  (check-equal? (sort released string<? #:key car) '(("a" 2 2) ("b" 2 2))))
