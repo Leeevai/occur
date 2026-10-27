@@ -288,3 +288,57 @@
                          event?)]
   [batch-share (-> event? time? exact-nonnegative-integer?)]
   [batch-share-interval (-> event? time? interval?)]))
+
+;; ===========================================================================
+;; ES.reference: reference payloads
+;;
+;; Instead of the data, an event may carry a pointer (a data-ref) naming a
+;; sub-stream and an interval, plus a small summary such as the newest
+;; value. Counting, windowing, and timing need only (ts, te, n) and the
+;; summary; a consumer that needs the values reads them from a store.
+
+(struct data-ref (substream interval summary) #:transparent)
+
+(define (make-reference-event type
+                              #:substream substream
+                              #:ts ts #:te [te ts] #:n [n 1]
+                              #:summary [summary (hasheq)]
+                              #:payload [extra '()]
+                              #:id [id #f] #:src [src #f])
+  (make-event type
+              (hash-set (->payload extra) 'ref (data-ref substream (interval ts te) (->payload summary)))
+              #:id id #:ts ts #:te te #:n n #:src src))
+
+(define (event-reference e)
+  (define r (hash-ref (event-payload e) 'ref #f))
+  (and (data-ref? r) r))
+(define (reference-event? e) (and (event-reference e) #t))
+
+;; A store holds, per sub-stream, samples (time . value) in time order.
+(struct store (samples) #:transparent)
+(define empty-store (store (hash)))
+
+(define (store-append st substream samples)
+  (define old (hash-ref (store-samples st) substream '()))
+  (store (hash-set (store-samples st) substream
+                   (sort (append old samples) < #:key car))))
+
+(define (store-read st ref)
+  (define iv (data-ref-interval ref))
+  (for/list ([s (in-list (hash-ref (store-samples st) (data-ref-substream ref) '()))]
+             #:when (interval-contains? iv (car s)))
+    s))
+
+(provide
+ empty-store
+ (contract-out
+  [struct data-ref ([substream any/c] [interval interval?] [summary hash?])]
+  [make-reference-event (->* (symbol? #:substream any/c #:ts time?)
+                             (#:te time? #:n exact-nonnegative-integer? #:summary (or/c hash? list?)
+                              #:payload (or/c hash? list?) #:id any/c #:src any/c)
+                             event?)]
+  [event-reference (-> event? (or/c data-ref? #f))]
+  [reference-event? (-> event? boolean?)]
+  [store? (-> any/c boolean?)]
+  [store-append (-> store? any/c (listof (cons/c time? any/c)) store?)]
+  [store-read (-> store? data-ref? (listof (cons/c time? any/c)))]))
