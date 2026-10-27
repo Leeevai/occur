@@ -422,3 +422,12 @@
                        operator?)]
   [struct intent ([reason symbol?] [ws any/c] [we any/c] [windows exact-nonnegative-integer?] [from-pending? boolean?])]
   [struct inst ([spec ispec?] [cstate any/c] [pending list?] [last (or/c #f time?)] [held list?] [rejudge? boolean?])]))
+
+;; A script step pushing a rule source (a configuration push, §14).
+(require "dataflow.rkt")
+(define (rule-source-push name items #:mode [mode 'replace] #:at [t #f])
+  (control (rule-source-msg name items mode) #:at t #:config? #t))
+
+(provide
+ (contract-out
+  [rule-source-push (->* (any/c list?) (#:mode (or/c 'replace 'patch) #:at (or/c #f time?)) step:control?)]))

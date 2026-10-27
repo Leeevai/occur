@@ -230,3 +230,51 @@
   [named-keys (-> hash? list? list?)]
   [fingerprint (-> ispec? list?)]
   [classify-edit (-> ispec? ispec? (or/c 'none 'job-only 'semantic))]))
+
+;; ===========================================================================
+;; Rules as JSON Lines: one item per line.
+;;   {"kind": "rule", "id": .., "condition": {"type": .., param: ..}, "watch": [..],
+;;    "rate_limit": [seconds, "defer"|"drop"], "flush": seconds, "retain_flush": bool,
+;;    "target": .., "params": {..}, "applies_to": "all"|"none"|[..], "on_update": "continue"|"restart"}
+;;   {"kind": "binding", "rule": .., "on": [..], "key": .., "watch": [..], "overrides": {..}, "params": {..}}
+;;   {"kind": "remove-rule", "id": ..} or {"kind": "remove-binding", "rule": .., "on": [..], "key": ..}
+
+(require json racket/file)
+
+(define (->sym v) (if (string? v) (string->symbol v) v))
+(define (jsexpr->rule-item h)
+  (case (hash-ref h 'kind)
+    [("rule")
+     (define c (hash-ref h 'condition))
+     (make-rule (hash-ref h 'id)
+                #:condition (condition (->sym (hash-ref c 'type))
+                                       (for/hasheq ([(k v) (in-hash c)] #:unless (eq? k 'type))
+                                         (values k (if (and (eq? k 'mode) (string? v)) (string->symbol v) v))))
+                #:watch (let ([w (hash-ref h 'watch #f)]) (and w (map ->sym w)))
+                #:modifiers (for/hasheq ([kv (list (let ([r (hash-ref h 'rate_limit #f)])
+                                                     (and r (cons 'rate-limit (cons (car r) (->sym (cadr r))))))
+                                                   (let ([f (hash-ref h 'flush #f)]) (and f (cons 'flush f)))
+                                                   (and (hash-ref h 'retain_flush #f) (cons 'flush-retain? #t)))]
+                                         #:when kv)
+                              (values (car kv) (cdr kv)))
+                #:target (hash-ref h 'target #f)
+                #:params (hash-ref h 'params (hasheq))
+                #:applies-to (let ([a (hash-ref h 'applies_to "all")]) (if (string? a) (string->symbol a) a))
+                #:on-update (->sym (hash-ref h 'on_update "restart")))]
+    [("binding")
+     (make-binding (hash-ref h 'rule) #:on (hash-ref h 'on) #:key (hash-ref h 'key "")
+                   #:watch (let ([w (hash-ref h 'watch #f)]) (and w (map ->sym w)))
+                   #:overrides (hash-ref h 'overrides (hasheq)) #:params (hash-ref h 'params (hasheq)))]
+    [("remove-rule") (removal 'rule (hash-ref h 'id))]
+    [("remove-binding") (removal 'binding (list (hash-ref h 'rule) (hash-ref h 'on) (hash-ref h 'key "")))]
+    [else (raise-arguments-error 'jsexpr->rule-item "unknown item kind" "kind" (hash-ref h 'kind))]))
+
+(define (read-jsonl-rule-items path)
+  (for/list ([line (file->lines path)] #:unless (regexp-match? #px"^\\s*$" line))
+    (jsexpr->rule-item (string->jsexpr line))))
+
+
+(provide
+ (contract-out
+  [jsexpr->rule-item (-> hash? (or/c rule? binding? removal?))]
+  [read-jsonl-rule-items (-> path-string? list?)]))
