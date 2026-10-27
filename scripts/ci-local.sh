@@ -7,6 +7,9 @@ cd "$(dirname "$0")/.."
 
 echo "== compile"
 raco make -v main.rkt
+# Recompile every module so that raco test never loads stale bytecode
+# after a dependency changed (fresh CI checkouts have no bytecode at all).
+raco make -j "${OCCUR_JOBS:-8}" $(find . -name '*.rkt' -not -path '*/compiled/*' -not -path './doc/*')
 
 echo "== test"
 raco test -j "${OCCUR_JOBS:-8}" .
