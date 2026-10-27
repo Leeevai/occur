@@ -188,3 +188,11 @@
 
 (spec-test 'TM.schedule "a malformed cron expression is a compile-time error"
   (check-compile-error "#lang occur\n(define-schedule s\n \"0 25 * * *\")\n" #rx"out of range" 3))
+
+(require (only-in "lang/retract.rkt" [occur-run retract-run]))
+
+(spec-test 'TM.retraction "⊖e in a source cancels the events derived from e"
+  (define items (map output-item (run-result-outputs (retract-run))))
+  (check-equal? (length items) 3)
+  (check-true (retraction? (third items)))
+  (check-equal? (event-attr (retraction-event (third items)) 'card) "c1"))
