@@ -342,3 +342,30 @@
   [store? (-> any/c boolean?)]
   [store-append (-> store? any/c (listof (cons/c time? any/c)) store?)]
   [store-read (-> store? data-ref? (listof (cons/c time? any/c)))]))
+
+;; ===========================================================================
+;; ES.composite: composite events
+;;
+;; A derived event with a non-empty constituent set C. By default
+;;   ts(c) = min ts(x), te(c) = max te(x), n(c) = 1  over x ∈ C.
+;; Operators override the interval where the spec documents an exception
+;; (absence deadlines, window bounds) by passing #:ts / #:te.
+
+(define (make-composite type payload constituents
+                        #:ts [ts #f] #:te [te #f] #:n [n 1]
+                        #:id [id #f] #:src [src #f])
+  (when (null? constituents)
+    (raise-arguments-error 'make-composite "a composite event needs at least one constituent"
+                           "type" type))
+  (make-event type payload
+              #:id id
+              #:ts (or ts (apply time-min (map event-ts constituents)))
+              #:te (or te (apply time-max (map event-te constituents)))
+              #:n n #:src src #:constituents constituents))
+
+(provide
+ (contract-out
+  [make-composite (->* (symbol? (or/c hash? (listof pair?)) (listof event?))
+                       (#:ts (or/c #f time?) #:te (or/c #f time?) #:n exact-nonnegative-integer?
+                        #:id any/c #:src any/c)
+                       event?)]))
