@@ -131,3 +131,15 @@
   (check-equal? (map event-id (hash-ref (pmatch-bindings (car cum)) 'x)) '("x1" "x2"))
   ;; a close with nothing inside still reports the interval
   (check-equal? (ids (denote (aperiodic* S X E) (list (ev "s" 'S 1) (ev "e" 'E 2)))) '(("s" "e"))))
+
+(spec-test '(PT.periodic PT.periodic-cumulative) "PER ticks every Δ after the opener until the close; PER* reports the ticks at the close"
+  (define S (prim 'S #:bind 's)) (define E (prim 'E #:bind 'e))
+  (define Hp (list (ev "s" 'S 0) (ev "e" 'E 35)))
+  (check-equal? (map pmatch-te (denote (periodic S 10 E) Hp)) '(10 20 30))
+  (define cum (denote (periodic* S 10 E) Hp))
+  (check-equal? (ids cum) '(("s" "e")))
+  (check-equal? (hash-ref (pmatch-bindings (car cum)) 'ticks) '(10 20 30))
+  ;; a tick at the close's start is not before it
+  (check-equal? (map pmatch-te (denote (periodic S 10 E) (list (ev "s" 'S 0) (ev "e" 'E 30)))) '(10 20))
+  ;; without a close, ticks run up to the horizon
+  (check-equal? (map pmatch-te (denote (periodic S 10 E) (list (ev "s" 'S 0)) #:horizon 25)) '(10 20)))

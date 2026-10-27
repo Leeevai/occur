@@ -333,3 +333,30 @@
                                                         [bindings (for/hasheq ([n names]) (values n '()))])))
          (list (pmatch-union ctx (for/fold ([acc base]) ([e2 (in-list inside)]) (pmatch-union ctx acc (lift e2)))
                              e3))])))))
+
+;; ===========================================================================
+;; PT.periodic, PT.periodic-cumulative. After e₁, a tick occurs at
+;; te(e₁) + jΔ for j = 1, 2, … while it is earlier than ts(e₃) of the
+;; closing e₃ (without one, up to the evaluation horizon).
+;;   PER:  each tick is the match {e₁}, with te the tick time.
+;;   PER*: one match {e₁, e₃} at the close, carrying the tick times as the
+;;         binding `ticks`.
+
+(register!
+ p:periodic?
+ (λ (ctx p denote)
+   (define Δ (p:periodic-period p))
+   (define closes (denote (p:periodic-close p)))
+   (append*
+    (for/list ([e1 (in-list (denote (p:periodic-open p)))])
+      (define e3 (first-closer ctx e1 closes))
+      (define limit (if e3 (pmatch-ts e3) +inf.0))
+      (define ticks (for/list ([j (in-naturals 1)]
+                               #:break (let ([t (+ (pmatch-te e1) (* j Δ))])
+                                         (or (>= t limit) (> t (oracle-ctx-horizon ctx)))))
+                      (+ (pmatch-te e1) (* j Δ))))
+      (cond
+        [(not (p:periodic-cumulative? p)) (for/list ([t (in-list ticks)]) (struct-copy pmatch e1 [te t]))]
+        [(not e3) '()]
+        [else (define m (pmatch-union ctx e1 e3))
+              (list (struct-copy pmatch m [bindings (hash-set (pmatch-bindings m) 'ticks ticks)]))])))))
