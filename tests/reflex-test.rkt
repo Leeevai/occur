@@ -23,3 +23,23 @@
   (check-equal? (triggers (r1:occur-run))
                 '((20 samples (0 20) 3 1 #hasheq())
                   (80 samples (25 50) 4 1 #hasheq()))))
+
+(require (prefix-in r2: "../examples/reflex/r2-merge.rkt"))
+
+(spec-test '(ST.monotonic-merge ES.batch)
+           "trace R2: each arrival's share past the high-water mark, the marks, and the late counts"
+  (define (contributions r)
+    (for/list ([e (run-result-events r 'contributions)]) (list (event-ts e) (event-te e) (event-n e))))
+  (check-equal? (contributions (r2:occur-run)) '((90 100 10) (100 105 5)))
+  ;; row by row: run the setup and the first k arrivals, then read the mark
+  ;; and the late count of d1's sensor
+  (define steps (r2:occur-steps))
+  (define setup (filter (λ (s) (not (step:arrive? s))) steps))
+  (define arrivals (filter step:arrive? steps))
+  (define rows
+    (for/list ([k (in-range 1 5)])
+      (define r (run (r2:occur-program) (append setup (take arrivals k)) #:final-watermark? #f))
+      (define marks (hash-ref (cdr (hash-ref (run-result-states r) 'contributions)) "d1"))
+      (define st (hash-ref marks (cons "d1" "d1-load")))
+      (list (hwm-state-hw st) (hwm-state-late st) (run-result-counter r 'contributions 'late))))
+  (check-equal? rows '((100 0 0) (105 5 5) (105 15 15) (105 25 25))))
