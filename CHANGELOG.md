@@ -73,3 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   matches (PT.flush); the five skip strategies; immediate and deferred
   evaluation; edge, rate-limit, and coalesce stages; trace A's table of
   §15.
+- Derivation (M13): summarized outputs, content-derived output identity
+  and downstream deduplication, ordered delivery per instant, closure of
+  derived streams, bounded feedback loops behind the cycle guard, actions,
+  and materialized views with scheduled export and health classification.
