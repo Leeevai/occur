@@ -40,3 +40,21 @@
   (check-equal? (list (event-ts p) (event-te p) (event-n p)) '(1 2 3))
   (check-equal? (event-type (car (run1 (project-operator '(card) #:type 'CardOnly) (list e)))) 'CardOnly)
   (check-exn #rx"no such attribute" (λ () (run1 (project-operator '(zip)) (list e)))))
+
+(spec-test 'OP.map "μ_f translates payloads, possibly into a new type, inheriting timestamps"
+  (define r (make-event 'TempF '((sensor . "s1") (f . 212)) #:id "t" #:ts 10 #:te 12))
+  (define to-c (map-operator (λ (e) (hasheq 'sensor (event-attr e 'sensor)
+                                            'c (* 5/9 (- (event-attr e 'f) 32))))
+                             #:type 'TempC))
+  (define out (car (run1 to-c (list r))))
+  (check-equal? (event-type out) 'TempC)
+  (check-equal? (event-attr out 'c) 100)
+  (check-equal? (list (event-ts out) (event-te out)) '(10 12))
+  (check-equal? (map event-id (event-constituents out)) '("t")))
+
+(spec-test 'OP.map "timestamps and multiplicity can be set explicitly"
+  (define r (make-event 'R '((at . 7)) #:id "r" #:ts 10 #:te 12))
+  (define out (car (run1 (map-operator (λ (e) (event-payload e)) #:ts (λ (e) (event-attr e 'at))
+                                       #:n (λ (e) 2))
+                         (list r))))
+  (check-equal? (list (event-ts out) (event-te out) (event-n out)) '(7 7 2)))

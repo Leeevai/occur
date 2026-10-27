@@ -53,3 +53,25 @@
 (provide
  (contract-out
   [project-operator (->* ((listof symbol?)) (#:type (or/c #f symbol?)) operator?)]))
+
+;; ---------------------------------------------------------------------------
+;; OP.map: μ_f translates e ↦ f(e), possibly into a new type. f returns the
+;; new payload; timestamps and multiplicity are inherited unless set.
+
+(define (map-operator f #:type [type #f] #:ts [tsf #f] #:te [tef #f] #:n [nf #f])
+  (stateless-operator
+   'map
+   (λ (e c)
+     (define ts (if tsf (tsf e) (event-ts e)))
+     (define te (if tef (tef e) (if tsf ts (event-te e))))
+     (emit! c (derive-from e (or type (event-type e)) (f e)
+                           #:ts ts #:te te #:n (if nf (nf e) (event-n e)) #:src 'map)))))
+
+(provide
+ (contract-out
+  [map-operator (->* ((-> event? (or/c hash? (listof pair?))))
+                     (#:type (or/c #f symbol?)
+                      #:ts (or/c #f (-> event? time?))
+                      #:te (or/c #f (-> event? time?))
+                      #:n (or/c #f (-> event? exact-nonnegative-integer?)))
+                     operator?)]))
