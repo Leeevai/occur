@@ -112,3 +112,62 @@
   ;; c1's limit rose to 2000 at minute 20, before its 1500 payment
   (check-equal? (last (filter (λ (x) (equal? (car x) "c1")) (attrs 'against-limit 'card 'amount 'limit)))
                 '("c1" 1500 2000)))
+
+;; --- patterns ----------------------------------------------------------
+
+;; the constituents of each match of a pattern node, as id lists
+(define (matches node) (map (λ (e) (map event-id (event-constituents e))) (events node)))
+
+(spec-test '(PT.absence DR.derive) "large payments with no 3-D Secure confirmation within two minutes"
+  (check-equal? (sort (attrs 'unconfirmed 'card 'reason) string<? #:key car)
+                '(("c1" "unconfirmed") ("c2" "unconfirmed"))))
+
+(spec-test '(PT.conjunction PT.where) "a login and a large payment in either order, from different countries"
+  (check-equal? (matches 'login-and-payment) '(("l3" "p10"))))
+
+(spec-test '(PT.disjunction DR.retract) "a decline for funds, or a payment over 2000 (later charged back)"
+  (check-equal? (matches 'funds-or-huge) '(("d4") ("p7")))
+  (check-equal? (length (retracted 'funds-or-huge)) 1))
+
+(spec-test '(PT.any OUT.first) "two of three signals, the first per initiator"
+  (check-equal? (matches 'two-signals) '(("p5" "d1") ("l3" "p10"))))
+
+(spec-test '(PT.kleene-star SEL.next OUT.maximal) "a small payment, any number of declines, then a large one"
+  (check-equal? (sort (matches 'small-then-large) string<? #:key car) '(("p1" "p10") ("q1" "p5"))))
+
+(spec-test '(PT.repeat SKIP.past-last OUT.first) "three to five declines, reported once"
+  (check-equal? (matches 'decline-burst) '(("d1" "d2" "d3"))))
+
+(spec-test '(PT.threshold PT.repeat SEL.next) "three payments in a row whose total crosses 2000"
+  (check-equal? (car (matches 'big-spree)) '("p4" "p9" "p10")))
+
+(spec-test '(CON.unrestricted CON.recent CON.chronicle CON.continuous) "which login explains c1's large payment"
+  (define (c1 node) (filter (λ (m) (member "p10" m)) (matches node)))
+  (check-equal? (c1 'any-login) '(("l1" "p10") ("l3" "p10")))
+  (check-equal? (c1 'latest-login) '(("l3" "p10")))
+  (check-equal? (c1 'oldest-login) '(("l1" "p10")))
+  (check-equal? (c1 'every-login) '(("l1" "p10") ("l3" "p10"))))
+
+(spec-test '(OUT.first OUT.last EVAL.deferred) "after a small payment, the first large one or all of them"
+  ;; c3's match with p7 is reported, then retracted with the chargeback
+  (check-equal? (matches 'first-large) '(("p1" "p2") ("p3" "p4") ("q1" "p5") ("p8" "p7") ("p9" "p10")))
+  (check-equal? (length (retracted 'first-large)) 1)
+  ;; last output waits for the bound, after the chargeback: c3's never appears
+  (check-equal? (matches 'last-large) '(("p1" "p2" "p4" "p10") ("p3" "p4" "p10") ("p9" "p10") ("q1" "p5"))))
+
+(spec-test '(SKIP.no-skip SKIP.to-next SKIP.past-last SKIP.to-first SKIP.to-last PT.kleene-plus)
+           "runs of at least two declines, under each skip strategy"
+  (check-equal? (length (matches 'runs-no-skip)) 11)
+  (check-equal? (matches 'runs-to-first) (matches 'runs-no-skip))      ; to-first d discards nothing here
+  (check-equal? (matches 'runs-to-next) '(("d1" "d2") ("d2" "d3") ("d3" "d4")))
+  (check-equal? (matches 'runs-to-last) '(("d1" "d2") ("d2" "d3") ("d3" "d4")))
+  (check-equal? (matches 'runs-past-last) '(("d1" "d2") ("d3" "d4"))))
+
+(spec-test 'EVAL.immediate "a payment then a decline, reported when the decline arrives"
+  (check-equal? (for/list ([o (outs 'declined-soon-after)]) (output-at o))
+                (list (m 13) (m 13) (m 14) (m 14) (m 15) (m 15) (m 16))))
+
+(spec-test '(CON.retain OUT.timeout-partial PT.flush) "four declines time out as a partial lock-out, retained"
+  (check-equal? (for/list ([o (outs 'lockout)])
+                  (list (output-at o) (event-attr (output-item o) 'reason) (map event-id (event-constituents (output-item o)))))
+                (list (list (m 23) 'timeout '("d1" "d2" "d3" "d4")))))
