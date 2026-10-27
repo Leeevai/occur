@@ -38,3 +38,20 @@
 (spec-test '(PT.schedule WN.calendar TM.schedule)
            "cron(expr) is PT.schedule over the calendar windows of a five-field UTC expression"
   (check-equal? (condition-of "(cron \"0 * * * *\")") (list 'schedule (hasheq 'cron "0 * * * *"))))
+
+(spec-test '(RL.template PT.flush CON.retain OUT.rate-limit RL.carry)
+           "reflex-rule maps max_delay, reset_on_max_delay, min_interval, and on_update onto the template"
+  (define found
+    (found-in (string-append "(reflex-rule r #:condition (accumulate #:min-samples 3) #:watch (\"load\")\n"
+                             "  #:max-delay-s 900 #:reset-on-max-delay #f #:min-interval-s 60 #:on-update continue\n"
+                             "  #:target \"job\" #:params ([threshold 50]) #:applies-to (\"d1\"))\n"
+                             "(define found (list (rule-id r-rule) (rule-watch r-rule) (rule-modifiers r-rule)\n"
+                             "  (rule-on-update r-rule) (rule-target r-rule) (rule-params r-rule) (rule-applies-to r-rule)))")))
+  (check-equal? found (list "r" '("load") (hasheq 'flush 900 'flush-retain? #t 'rate-limit '(60 . defer))
+                            'continue "job" (hasheq 'threshold 50) '("d1")))
+  ;; reset_on_max_delay true (the default) consumes: no retain
+  (check-equal? (found-in (string-append "(reflex-rule r #:condition (accumulate #:min-samples 3) #:max-delay-s 900\n"
+                                         "  #:reset-on-max-delay #t)\n(define found (rule-modifiers r-rule))"))
+                (hasheq 'flush 900))
+  (check-compile-error "#lang occur\n(require occur/lib/reflex)\n(reflex-rule r #:condition (accumulate #:min-samples 3)\n #:reset-on-max-delay #f)\n"
+                       #rx"#:reset-on-max-delay needs #:max-delay-s" 4))

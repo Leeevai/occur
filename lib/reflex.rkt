@@ -6,9 +6,11 @@
 ;; gives its vocabulary in occur's public forms only: nothing here requires
 ;; a private module, and the runtime has no case for Reflex
 ;; (tests/reflex-purity.rkt checks the first).
+(require (for-syntax racket/base syntax/parse))
 (provide DataArrival SensorData Trigger
          sensor-write
-         accumulate window silence cron)
+         accumulate window silence cron
+         reflex-rule)
 
 ;; ---------------------------------------------------------------------------
 ;; §16.1 Inputs
@@ -66,6 +68,55 @@
 ;; coalesced into one output (OUT.coalesce). expr has the five fields of
 ;; cron, read in UTC.
 (define-condition cron #:as pt:schedule #:rename ())
+
+;; ---------------------------------------------------------------------------
+;; §16.2 Rules
+;;
+;; (reflex-rule id #:condition condition option ...)              RL.template
+;; A rule template with Reflex's modifiers, which become the template's:
+;;   #:watch (type ...)               the measurement types it watches (all
+;;                                    when omitted)
+;;   #:max-delay-s Δd                 PT.flush on the processing clock: an
+;;                                    accumulation not ready Δd after its first
+;;                                    contribution fires anyway (max_delay)
+;;   #:reset-on-max-delay #f          the max_delay output keeps its
+;;                                    contributions counting (CON.retain); #t,
+;;                                    the default, consumes them
+;;   #:min-interval-s Δc              OUT.rate-limit(Δc, defer): what is capped
+;;                                    is carried into the next output
+;;   #:on-update continue | restart   RL.carry on a semantic edit
+;; and the template's own #:target, #:params, #:applies-to, #:id, and
+;; #:in-source. Rule sources and bindings are the core rule-source and bind
+;; (RL.source, RL.binding, RL.fan-out with #:also).
+
+(define-syntax (reflex-rule stx)
+  (syntax-parse stx
+    [(_ name:id (~alt (~once (~seq #:condition c:expr))
+                      (~optional (~seq #:watch (w:expr ...)))
+                      (~optional (~seq #:max-delay-s d:expr))
+                      (~optional (~seq #:reset-on-max-delay r:boolean))
+                      (~optional (~seq #:min-interval-s ci:expr))
+                      (~optional (~seq #:on-update u:id))
+                      (~optional (~seq #:target t:expr))
+                      (~optional (~seq #:params ps))
+                      (~optional (~seq #:applies-to a))
+                      (~optional (~seq #:id i:expr))
+                      (~optional (~and #:in-source in)))
+        ...)
+     (when (and (attribute r) (not (attribute d)))
+       (raise-syntax-error 'reflex-rule "#:reset-on-max-delay needs #:max-delay-s" stx (attribute r)))
+     (define (opt kw v) (if v (list kw v) '()))
+     #`(rule-template name #:condition c
+         #,@(if (attribute w) (list #'#:watch #'(w ...)) '())
+         #,@(opt #'#:flush (attribute d))
+         #,@(if (and (attribute r) (not (syntax-e (attribute r)))) (list #'#:retain #'(max_delay)) '())
+         #,@(if (attribute ci) (list #'#:rate-limit #`(#,(attribute ci) defer)) '())
+         #,@(opt #'#:on-update (attribute u))
+         #,@(opt #'#:target (attribute t))
+         #,@(opt #'#:params (attribute ps))
+         #,@(opt #'#:applies-to (attribute a))
+         #,@(opt #'#:id (attribute i))
+         #,@(if (attribute in) (list #'#:in-source) '()))]))
 
 ;; ---------------------------------------------------------------------------
 ;; §16.3 Outputs
