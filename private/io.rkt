@@ -86,6 +86,14 @@
 (define (value->string v)
   (cond [(string? v) (~s v)]
         [(location? v) (format "(~a, ~a)" (location-x v) (location-y v))]
+        ;; ES.reference: the sub-stream and interval pointed at, and the summary
+        [(data-ref? v)
+         (define iv (data-ref-interval v))
+         (format "<~a [~a, ~a]~a>" (value->string (data-ref-substream v))
+                 (time->string (interval-start iv)) (time->string (interval-end iv))
+                 (apply string-append
+                        (for/list ([k (sort (hash-keys (data-ref-summary v)) symbol<?)])
+                          (format " ~a=~a" k (value->string (hash-ref (data-ref-summary v) k))))))]
         [(real? v) (time->string v)]
         [(symbol? v) (symbol->string v)]
         [else (~s v)]))

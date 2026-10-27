@@ -39,4 +39,7 @@
 (test-case "events and items print compactly"
   (define e (make-event 'Swipe '((card . "c1") (amount . 2)) #:at 60 #:n 2))
   (check-equal? (event->string e) "Swipe [60, 60] n=2 amount=2 card=\"c1\"")
-  (check-equal? (item->string (retraction e)) "⊖ Swipe [60, 60] n=2 amount=2 card=\"c1\""))
+  (check-equal? (item->string (retraction e)) "⊖ Swipe [60, 60] n=2 amount=2 card=\"c1\"")
+  ;; a reference payload prints what it points at
+  (check-equal? (event->string (make-reference-event 'Chunk #:substream "s1" #:ts 1 #:te 9 #:n 3 #:summary '((newest . 2.5))))
+                "Chunk [1, 9] n=3 ref=<\"s1\" [1, 9] newest=2.5>"))
