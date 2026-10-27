@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['*']
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      OCCUR_TRIALS: "1000"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: Bogdanp/setup-racket@v1.15
+        with:
+          architecture: x64
+          distribution: full
+          variant: CS
+          version: '9.3'
+
+      - name: Install the package and its dependencies
+        run: raco pkg install --auto --batch
+
+      - name: Compile
+        run: raco make -v main.rkt
+
+      - name: Test
+        run: raco test -j 4 .
+
+      - name: Check package dependencies
+        run: raco setup --check-pkg-deps --pkgs occur
+
+      - name: Build the Scribble docs
+        run: |
+          if [ -f scribblings/occur.scrbl ]; then
+            raco scribble --htmls --dest "$RUNNER_TEMP/doc" scribblings/occur.scrbl
+          else
+            echo "No manual yet."
+          fi
