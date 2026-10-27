@@ -250,3 +250,41 @@
                       #:constituents (listof event?))
                      event?)]
   [event-set-attr (-> event? symbol? any/c event?)]))
+
+;; ===========================================================================
+;; ES.batch: batch events and shares
+;;
+;; A batch event stands for n(e) >= 0 samples spread evenly over [ts, te].
+;; share(e, b) is the number of those samples lying strictly past boundary b:
+;;
+;;   0                                                   if n = 0 or te <= b
+;;   n                                                   if ts > b
+;;   min(n, max(1, round(n · (te − b) / (te − ts))))     otherwise
+;;
+;; where round is round-half-to-even (Racket's `round`). In the last case
+;; ts <= b < te, so te − ts > 0.
+
+(define (make-batch-event type payload #:ts ts #:te te #:n n
+                          #:id [id #f] #:src [src #f])
+  (make-event type payload #:id id #:ts ts #:te te #:n n #:src src))
+
+(define (batch-share e b)
+  (define n (event-n e))
+  (define ts (event-ts e))
+  (define te (event-te e))
+  (cond [(or (zero? n) (<= te b)) 0]
+        [(> ts b) n]
+        [else (min n (max 1 (inexact->exact (round (* n (/ (- te b) (- te ts)))))))]))
+
+;; The interval of the share past b: [max(ts, b), te].
+(define (batch-share-interval e b)
+  (interval (time-max (event-ts e) b) (event-te e)))
+
+(provide
+ (contract-out
+  [make-batch-event (->* (symbol? (or/c hash? (listof pair?))
+                                  #:ts time? #:te time? #:n exact-nonnegative-integer?)
+                         (#:id any/c #:src any/c)
+                         event?)]
+  [batch-share (-> event? time? exact-nonnegative-integer?)]
+  [batch-share-interval (-> event? time? interval?)]))
