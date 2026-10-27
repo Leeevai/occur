@@ -44,3 +44,43 @@ through a node declared recursive (@tt{DR.cycle-guard}).}
 simulated from the steps. Deadlines due before a step fire first, at their
 own times; outputs of a step are delivered grouped by key; after a
 suspension every overdue instance fires once.}
+
+@section[#:tag "checkpoint"]{Checkpoint and replay (@tt{TM.checkpoint}, @tt{TM.replay})}
+
+The runner keeps every data, watermark, control, and clock step it has run:
+this log is the retained input. Three steps act on it. In a
+@racket[script] they are written @racket[(checkpoint)], @racket[(restore)],
+and @racket[(cold-start)].
+
+@deftogether[(@defproc[(checkpoint) step:checkpoint?]
+              @defproc[(restore) step:restore?]
+              @defproc[(cold-start) step:cold-start?])]{
+@racket[checkpoint] delivers pending outputs, then snapshots every node's
+state, the deadlines, watermarks, counters, provenance, the id counter, and
+the read position. @racket[restore] returns to the last snapshot and
+re-reads the input logged after it, as after a crash: the outputs of that
+interval repeat with the same identities, and @racket[dedupe-outputs]
+removes the repeats. It is an error without an earlier checkpoint.
+
+@racket[cold-start] rebuilds every node from its initial state by
+replaying the whole log with processing time frozen. Processing-time
+deadlines wait until the replay has caught up, so replayed arrivals are
+not taken for silence or flush deadlines. Outputs produced meanwhile are
+held. They are released at the next configuration push when the program
+has a configuration operator, otherwise as soon as the replay has caught
+up. Released outputs are coalesced to one per operator instance
+(@tt{OUT.coalesce}) and judged against the instances then in force; an
+output whose instance is gone is dropped and counted as
+@racket['dropped-after-replay].}
+
+@codeblock|{
+(script
+ (at 1 arrivals (reading 1 1))
+ (at 2 arrivals (reading 2 1))        ; trigger 1
+ (checkpoint)
+ (at 3 arrivals (reading 3 1))
+ (at 4 arrivals (reading 4 1))        ; trigger 2
+ (restore)                            ; back to the checkpoint; 3 and 4 are re-read
+ (cold-start)                         ; no checkpoint: replay everything
+ (rule-source-push 'alarms alarms))   ; held triggers are released here
+}|
