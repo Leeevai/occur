@@ -19,7 +19,7 @@ This file is the resume point for work on occur. Read it, together with
 | M10 | Pattern AST and reference oracle | §11 | done (PT.flush follows with M12) |
 | M11 | Incremental pattern engine, deadline scheduler, differential tests | §11, §17 | done |
 | M12 | Selection, consumption, output, skip, and evaluation policies | §12 | done |
-| M13 | Derivation | §13 | todo |
+| M13 | Derivation | §13 | done |
 | M14 | Rules as data | §14 | todo |
 | M15 | Checkpoint, restore, and replay | §6 | todo |
 | M16 | Acceptance: card testing | §15 | todo |
@@ -29,13 +29,14 @@ This file is the resume point for work on occur. Read it, together with
 
 ## Next step
 
-M13: derivation (§13) in `private/derive.rkt`: summarized outputs
-(DR.summary), content-derived output identity and downstream
-deduplication (DR.output-identity), ordered delivery (DR.ordered),
-closure of derived events into other operators (DR.closure), the cycle
-guard in the surface (DR.cycle-guard, `#:recursive`), actions (DR.act),
-materialized views with health classification and scheduled export
-(DR.view), and retraction propagation (DR.retract).
+M14: rules as data in `private/rules.rkt`: templates with conditions
+(accumulate with flush and rate limit, window close, silence with
+recovery, schedule) as instance operators, bindings with overrides and
+params, fan-out, instance identity, named sources replaced whole or
+patched, ownership, dangling and invalid items reported, semantic
+fingerprints, progress carry (continue/restart), re-judge on edit,
+convergence; the rules node keyed by entity; `rule-template`,
+`rule-source`, `bind`, and `define-condition` surface forms.
 
 Notes:
 - Hosted CI runs are blocked by the account's GitHub billing; every commit
