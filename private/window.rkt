@@ -295,3 +295,28 @@
   [count-window-operator (->* (exact-positive-integer? exact-positive-integer? accumulator?)
                               (#:key (or/c #f (-> event? any/c)) #:type symbol?)
                               operator?)]))
+
+;; ===========================================================================
+;; WN.landmark: [t0, now), growing forever. After every event at or after
+;; t0, the running result is emitted with ts = t0 and te = the newest end.
+
+(define (landmark-window-operator t0 acc #:key [key #f] #:type [type 'Window])
+  (make-operator
+   'landmark-window
+   #:key key
+   #:init-key (λ (gl k c) (list ((accumulator-init acc)) -inf.0 '()))
+   #:on-event
+   (λ (gl st e c)
+     (cond
+       [(< (event-ts e) t0) (count! c 'before-landmark) st]
+       [else
+        (define a ((accumulator-add acc) (car st) e))
+        (define hi (time-max (cadr st) (event-te e)))
+        (define contents (cons e (caddr st)))
+        (emit! c (window-output type (ctx-key c) t0 hi acc a (reverse contents)))
+        (list a hi contents)]))))
+
+(provide
+ (contract-out
+  [landmark-window-operator (->* (time? accumulator?) (#:key (or/c #f (-> event? any/c)) #:type symbol?)
+                                 operator?)]))

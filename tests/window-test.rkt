@@ -136,3 +136,9 @@
   (check-equal? (map (λ (e) (list (event-ts e) (event-te e) (event-attr e 'count) (event-attr e 'events)))
                      (run-result-events r))
                 '((10 30 9 3) (30 50 15 3))))
+
+(spec-test 'WN.landmark "a landmark window grows from t0 forever"
+  (define r (run-window (landmark-window-operator 100 contents-accumulator)
+                        (list (arrive 1 'in (pt "early" 50)) (arrive 2 'in (pt "a" 120)) (arrive 3 'in (pt "b" 160)))))
+  (check-equal? (wins r) '((100 120 1) (100 160 2)))
+  (check-equal? (run-result-counter r 'w 'before-landmark) 1))
