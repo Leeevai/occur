@@ -23,11 +23,13 @@ holds. @racket[(filter (> amount 1000))]}
 π_A restricts the payload. Every attribute must be carried by every type of
 the stream (checked at compile time).}
 
-@specform*[[(map type [attr expr] ... time-option ...)
-            (map [attr expr] ...+ time-option ...)]
-           #:grammar ([time-option (code:line #:ts expr) (code:line #:te expr) (code:line #:n expr)])]{
+@specform[(map type [attr expr] ... time-option ...)
+          #:grammar ([time-option (code:line #:ts expr) (code:line #:te expr) (code:line #:n expr)])]{
 @tt{OP.map}: μ_f. The typed form builds an event of @racket[type] and must
-give exactly its attributes. The untyped form updates or adds attributes.}
+give exactly its attributes.}
+
+@specform[(map [attr expr] ...+ time-option ...)]{The untyped form updates
+or adds attributes and keeps the event's type.}
 
 @specform[(enrich #:key expr #:with lookup maybe-adds maybe-missing)
           #:grammar ([maybe-adds (code:line) (code:line #:adds ([attr : domain] ...))]
