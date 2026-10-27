@@ -27,7 +27,8 @@ aperiodic interval, and how bindings behave under repetition.
   among m's events.
 - **Aperiodic and periodic closers.** The interval opened by e₁ closes at
   the first later closer, the one with the smallest start; ties go to the
-  earliest end, then the earliest arrival. PER without a closer ticks up to
+  earliest end, then to the smallest event ids (not the arrival order, so
+  the answer does not depend on the order events arrived in). PER without a closer ticks up to
   the evaluation horizon (the newest end time by default).
 - **Bindings.** A binding under a repetition is a list in time order;
   repetitions of repetitions concatenate. The empty match of `P*` binds its

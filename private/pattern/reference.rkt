@@ -316,7 +316,7 @@
                                      (and (= (pmatch-ts x) (pmatch-ts y))
                                           (or (< (pmatch-te x) (pmatch-te y))
                                               (and (= (pmatch-te x) (pmatch-te y))
-                                                   (< (cdr (pmatch-end ctx x)) (cdr (pmatch-end ctx y))))))))))))
+                                                   (string<? (closer-ids x) (closer-ids y)))))))))))
 
 (register!
  p:aperiodic?
@@ -369,3 +369,7 @@
         [(not e3) '()]
         [else (define m (pmatch-union ctx e1 e3))
               (list (struct-copy pmatch m [bindings (hash-set (pmatch-bindings m) 'ticks ticks)]))])))))
+
+;; Ties between closers break by their event ids, which do not depend on
+;; arrival order (decision 0010).
+(define (closer-ids m) (format "~a" (sort (map (λ (e) (format "~a" (event-id e))) (pmatch-events m)) string<?)))

@@ -319,7 +319,7 @@
                                      (and (= (pmatch-ts x) (pmatch-ts y))
                                           (or (< (pmatch-te x) (pmatch-te y))
                                               (and (= (pmatch-te x) (pmatch-te y))
-                                                   (< (cdr (pmatch-end ctx x)) (cdr (pmatch-end ctx y))))))))))))
+                                                   (string<? (closer-ids x) (closer-ids y)))))))))))
 
 (define (in-indexed l) (in-parallel (in-list l) (in-naturals)))
 
@@ -391,3 +391,7 @@
   [engine-advance (->* (engine? time? time?) (#:last-finite time?) (values engine? (listof pmatch?)))]
   [engine-deadlines (-> engine? (values (or/c #f deadline/c) (or/c #f time?)))]
   [register-selection-check! (-> symbol? procedure? void?)]))
+
+;; Ties between closers break by their event ids, which do not depend on
+;; arrival order (decision 0010).
+(define (closer-ids m) (format "~a" (sort (map (λ (e) (format "~a" (event-id e))) (pmatch-events m)) string<?)))
