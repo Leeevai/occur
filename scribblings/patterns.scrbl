@@ -78,6 +78,30 @@ Spec §11.4. These predicates and constructors are available in
 @racket[window-close-operator] (@tt{PT.window-close}), and calendar windows
 (@tt{PT.schedule}).
 
+@section{Policies}
+
+Spec §12. Options of @racket[define-pattern] choose how matches are selected
+and reported; the stream stages @racket[(coalesce)],
+@racket[(rate-limit d #:mode drop)] or @racket[defer], and
+@racket[(edge #:enter expr #:leave expr)] apply output policies to any
+stream.
+
+@tabular[#:style 'boxed
+ (list (list @bold{Option} @bold{Values} @bold{Spec})
+       (list @racket[#:selection] "strict, partition, next (skip-till-next-match), any (skip-till-any-match)" "SEL.*")
+       (list @racket[#:consumption] "unrestricted, recent, chronicle, continuous, cumulative" "CON.*")
+       (list @racket[#:retain] "(timeout): timed-out outputs consume nothing" "CON.retain")
+       (list @racket[#:output] "every, first, last, maximal" "OUT.*")
+       (list @racket[#:timeout-partial] "(duration clock): report partial matches that time out" "OUT.timeout-partial, PT.flush")
+       (list @racket[#:skip] "no-skip, to-next, past-last, (to-first x), (to-last x)" "SKIP.*")
+       (list @racket[#:eval] "immediate, deferred" "EVAL.*"))]
+
+Selection strategies are conditions on every event that follows a step, so
+they apply to steps inside any composite pattern; on one key the match sets
+nest strict ⊆ partition ⊆ next ⊆ any. Consumption decides which candidates
+one terminator completes; output filters what is reported; last and maximal
+output defer evaluation until the watermark passes the match's scope.
+
 @section{The incremental engine}
 
 Patterns run on an incremental engine (@filepath{private/pattern/nfa.rkt}):
