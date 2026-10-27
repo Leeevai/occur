@@ -39,4 +39,5 @@ time.
 @include-section["patterns.scrbl"]
 @include-section["derivation.scrbl"]
 @include-section["rules.scrbl"]
+@include-section["reflex.scrbl"]
 @include-section["examples.scrbl"]
