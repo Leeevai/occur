@@ -191,9 +191,12 @@
            (registry-add-node! occur-registry final)))]))
 
 ;; ---------------------------------------------------------------------------
-;; (script step ...): an explicit script replacing the sources' data.
+;; (script option ... step ...): an explicit script replacing the sources' data.
 ;;   (at t source event)   (advance-to t)   (watermark source t)   (suspend t1 t2)
 ;;   or any expression producing a runtime step.
+;; options: #:start t, the processing time the simulated clock starts at (the
+;; declarations' setup steps run then), and #:final-watermark? b, whether
+;; the run ends by moving every watermark to +∞ (the default).
 
 (define-syntax (script stx)
   (define (step s)
@@ -208,9 +211,12 @@
       [((~datum suspend) t1:expr t2:expr) #'(suspend t1 t2)]
       [e:expr #'e]))
   (syntax-parse stx
-    [(_ s ...)
+    [(_ (~alt (~optional (~seq #:start t0:expr)) (~optional (~seq #:final-watermark? fw:expr))) ... s ...)
      (with-syntax ([(st ...) (map step (syntax->list #'(s ...)))])
-       #'(registry-set-script! occur-registry (list st ...)))]))
+       #`(begin
+           #,@(if (attribute t0) (list #'(registry-set-option! occur-registry 'start t0)) '())
+           #,@(if (attribute fw) (list #'(registry-set-option! occur-registry 'final-watermark? fw)) '())
+           (registry-set-script! occur-registry (list st ...))))]))
 
 ;; ---------------------------------------------------------------------------
 ;; (define-schedule name "cron expression")                       TM.schedule

@@ -53,8 +53,11 @@
                                                   (and (= (cadr x) (cadr y)) (< (caddr x) (caddr y))))))))])
          (for/list ([x (in-list sorted)]) (arrive (car x) (list-ref x 3) (list-ref x 4)))))))
 
+;; Options: 'start, the processing time the simulated clock starts at (the
+;; setup steps run then), and 'final-watermark?.
 (define (run-registry r)
   (run (registry-program r) (registry-steps r)
+       #:clock (simulated-clock (hash-ref (registry-options r) 'start 0))
        #:final-watermark? (hash-ref (registry-options r) 'final-watermark? #t)))
 
 (define (print-run-result res [out (current-output-port)])

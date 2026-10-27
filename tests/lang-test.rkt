@@ -508,3 +508,11 @@
                        #rx"unknown parameter #:size; expected \\(#:width #:every-kind\\)" 5)
   (check-compile-error "#lang occur\n(define-condition c #:as pt:accumulate #:rename\n ([#:n #:count add1]))\n"
                        #rx"an overridable parameter cannot be converted" 3))
+
+(require (only-in "lang/options.rkt" [occur-run options-run]))
+
+(spec-test '(TM.processing-time TM.schedule TM.watermark) "a script can start the clock at a given time and skip the final watermark"
+  (define r (options-run))
+  ;; ticks from 10:20 on, not from 1970
+  (check-equal? (map (λ (e) (event-attr e 'first)) (by-node r 'hourly)) (list (utc 2026 1 5 11 0) (utc 2026 1 5 12 0)))
+  (check-equal? (by-node r 'per-minute) '()))
