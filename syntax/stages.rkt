@@ -290,7 +290,12 @@
                   #f (shape-with-fields shp added) (stage-ctx-key ctx))])))
 
 ;; ---------------------------------------------------------------------------
-;; (split T #:for (clause ...) [a expr] ... #:ts e maybe-te maybe-n)   OP.split
+;; (split T #:for (clause ...) [a expr] ... #:ts e maybe-te maybe-n
+;;        maybe-reference)                                          OP.split
+;; maybe-reference: #:reference substream-expr maybe-summary, where
+;; maybe-summary is #:summary ([k expr] ...). Each child is then a reference
+;; event (ES.reference): its `ref` attribute points at the sub-stream over
+;; [ts, te] and carries the summary, instead of the samples themselves.
 
 (register-stage!
  'split
@@ -299,19 +304,31 @@
    (syntax-parse stx
      [(_ t:id (~alt (~once (~seq #:for (clause ...)))
                     (~optional (~seq #:ts ts0:expr)) (~optional (~seq #:te te0:expr))
-                    (~optional (~seq #:n n0:expr)) [a:id v:expr])
+                    (~optional (~seq #:n n0:expr))
+                    (~optional (~seq #:reference ref:expr))
+                    (~optional (~seq #:summary ([sk:id sv:expr] ...)))
+                    [a:id v:expr])
          ...)
       (define ty (lookup-type #'t stx))
       (check-fields! 'split ty #'(a ...) stx)
       (unless (attribute ts0) (raise-syntax-error 'split "each child needs #:ts" stx))
+      (when (and (attribute sk) (not (attribute ref)))
+        (raise-syntax-error 'split "#:summary needs #:reference: a summary belongs to a reference" stx))
       (with-syntax ([ts (attribute ts0)]
                     [te (or (attribute te0) (attribute ts0))]
                     [n (or (attribute n0) #'1)])
+        (define child
+          (if (attribute ref)
+              #`(make-reference-event 't #:substream #,(attribute ref) #:ts ts #:te te #:n n
+                                      #:summary (list #,@(for/list ([k (or (attribute sk) '())] [x (or (attribute sv) '())])
+                                                           #`(cons '#,k #,x)))
+                                      #:payload (list (cons 'a v) ...))
+              #'(make-event 't (list (cons 'a v) ...) #:ts ts #:te te #:n n)))
         (stage-out* #`(split-operator
-                       #,(event-lambda shp #'(for/list (clause ...)
-                                               (make-event 't (list (cons 'a v) ...) #:ts ts #:te te #:n n))
-                                       #:lexical stx))
-                    #f (type-shape ty) (stage-ctx-key ctx)))])))
+                       #,(event-lambda shp #`(for/list (clause ...) #,child) #:lexical stx))
+                    #f
+                    (if (attribute ref) (shape-with-fields (type-shape ty) '((ref . Any))) (type-shape ty))
+                    (stage-ctx-key ctx)))])))
 
 ;; A stream of its own reading output `port` of `node-id`.
 (define (side-stream-definition br node-id port shp ctx)

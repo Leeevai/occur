@@ -463,3 +463,19 @@
   (check-compile-error (string-append "#lang occur\n(event-type W [owner : String] [type : String])\n(source w #:types (W))\n"
                                       "(define-stream s (from w)\n (key-by owner #:kind type))\n")
                        #rx"#:kind needs #:substream" 5))
+
+(require (only-in "lang/reference.rkt" [occur-run reference-run]))
+
+(spec-test '(ES.reference ES.batch OP.split) "split can build reference events that point at the samples"
+  (define r (reference-run))
+  (define chunks (by-node r 'chunks))
+  (check-equal? (for/list ([e chunks])
+                  (define ref (event-reference e))
+                  (list (event-attr e 'sensor) (event-ts e) (event-te e) (event-n e)
+                        (data-ref-substream ref) (data-ref-interval ref) (data-ref-summary ref)))
+                (list (list "s1" 1 9 3 "s1" (interval 1 9) (hasheq 'newest 2.5))
+                      (list "s2" 4 4 1 "s2" (interval 4 4) (hasheq 'newest 0.5))))
+  (check-equal? (map (λ (e) (event-attr e 'sensor)) (by-node r 'high)) '("s1"))
+  (check-compile-error (string-append "#lang occur\n(event-type U [xs : Any])\n(event-type C [x : Any] #:derived)\n(source u #:types (U))\n"
+                                      "(define-stream s (from u)\n (split C #:for ([x xs]) [x x] #:ts 0 #:summary ([k 1])))\n")
+                       #rx"#:summary needs #:reference" 6))
