@@ -37,3 +37,19 @@
   (check-equal? (map (λ (e) (list (event-attr e 'owner) (event-attr e 'n))) (run-result-events r))
                 '((d7 1) (d7 2) (d8 1)))
   (check-equal? (sort (hash-keys (cdr (hash-ref (run-result-states r) 'n))) symbol<?) '(d7 d8)))
+
+(spec-test 'ST.dedupe "an event is dropped when an earlier one with its key lies within the horizon"
+  (define op (dedupe-operator (λ (e) (event-attr e 'k)) #:horizon 10))
+  (define in (list (ev "a" 0 '((k . 1))) (ev "b" 5 '((k . 1))) (ev "c" 5 '((k . 2)))
+                   (ev "d" 30 '((k . 1))) (ev "e" 38 '((k . 1)))))
+  (define r (run-operator op (list in)))
+  (check-equal? (ids (run-result-events r)) '("a" "c" "d"))
+  (check-equal? (run-result-counter r 'op 'duplicates) 2))
+
+(spec-test 'ST.dedupe "at-least-once redelivery is removed on the processing clock too"
+  (define op (dedupe-operator (λ (e) (event-id e)) #:horizon 60 #:clock 'processing-time))
+  (define a (ev "a" 0))
+  (define r (run-operator op (list (list a a a)) #:arrivals '((0 10 100))))
+  (check-equal? (ids (run-result-events r)) '("a" "a"))
+  ;; the remembered times are forgotten a horizon after the last event
+  (check-equal? (hash-count (cdr (hash-ref (run-result-states r) 'op))) 1))
