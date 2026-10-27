@@ -61,3 +61,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `define-pattern` with compile-time checks for bindings, Kleene misuse,
   and policy names, and a warning for unbounded patterns; the enforced
   coverage test.
+- Incremental engine (M11): a tree of incremental match automata with
+  delta joins, deferred decisions at the watermark, hybrid-clock absence,
+  strict event-time deadlines, per-node arrival sequence numbers, and
+  differential property tests against the oracle; the default engine of
+  `define-pattern`.
