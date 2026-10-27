@@ -340,6 +340,14 @@
   (check-equal? (compile-warnings (string-append pat-header "(define-pattern p #:from feed #:within 60 (kleene+ (b : Swipe)))\n"))
                 ""))
 
+(spec-test '(OUT.maximal OUT.last) "last or maximal output without #:within draws a warning"
+  (check-regexp-match #rx"warning: pattern p has maximal output but no #:within; its output waits for the end of the stream"
+                      (compile-warnings (string-append pat-header "(define-pattern p #:from feed #:output maximal (seq (a : Swipe) (b : Swipe)))\n")))
+  (check-regexp-match #rx"pattern p has last output but no #:within"
+                      (compile-warnings (string-append pat-header "(define-pattern p #:from feed #:output last (seq (a : Swipe) (b : Swipe)))\n")))
+  (check-equal? (compile-warnings (string-append pat-header "(define-pattern p #:from feed #:output maximal (within (seq (a : Swipe) (b : Swipe)) 60))\n"))
+                ""))
+
 (require (only-in "lang/policies.rkt" [occur-run policies-run]))
 
 (define (constituent-ids r node)

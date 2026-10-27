@@ -369,6 +369,12 @@
                 (not (memq 'within heads)))
        (warn! stx (format "pattern ~a has negation or Kleene closure but no #:within; its state can grow without bound (spec §17)"
                           (syntax-e #'name))))
+     ;; last and maximal output without a bound are final only at the end of the stream
+     (define top-within? (syntax-parse body [((~datum within) . _) #t] [_ #f]))
+     (when (and (memq (hash-ref policies 'output #f) '(last maximal))
+                (not (hash-ref opts '#:within #f)) (not top-within?))
+       (warn! stx (format "pattern ~a has ~a output but no #:within; its output waits for the end of the stream (spec §12.3)"
+                          (syntax-e #'name) (hash-ref policies 'output))))
      (define where-expr
        (cond [(hash-ref opts '#:where #f)
               => (λ (θ) (check-binding-uses! θ bindings stx) (bindings-lambda bindings θ #:lexical θ))]
