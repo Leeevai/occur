@@ -38,3 +38,4 @@ time.
 @include-section["allen.scrbl"]
 @include-section["patterns.scrbl"]
 @include-section["derivation.scrbl"]
+@include-section["rules.scrbl"]
