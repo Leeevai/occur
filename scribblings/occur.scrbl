@@ -30,3 +30,4 @@ time.
 @include-section["language.scrbl"]
 @include-section["runner.scrbl"]
 @include-section["operations.scrbl"]
+@include-section["structure.scrbl"]
