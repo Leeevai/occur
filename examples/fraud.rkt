@@ -10,6 +10,12 @@
 (event-type Item [card : String] [sku : String] [price : Real] #:derived)
 (event-type Cents [card : String] [cents : Integer] #:derived)
 
+(event-type Login [card : String] [country : String])
+(event-type Decline [card : String] [reason : String])
+(event-type ThreeDS [card : String])
+(event-type CardInfo [card : String] [holder : String] [home : String])
+(event-type Limit [card : String] [limit : Real])
+
 (define (pay t id card merchant amount #:country [country "PT"] #:channel [channel "web"] #:ref [ref id])
   (Payment #:at (minutes t) #:id id [card card] [merchant merchant] [amount amount] [country country]
            [channel channel] [ref ref]))
@@ -111,3 +117,57 @@
   (window (tumbling #:size (hours 24)))
   (aggregate [median (median amount)] [p90 (percentile amount 0.9)] [cards (count-distinct card)]
              [usual (mode merchant)] [top-2 (top-k amount 2)] [approx-cards (approx-distinct card)]))
+
+;; ---------------------------------------------------------------------------
+;; Context from other streams (§9)
+
+(source logins #:types (Login)
+  #:from (events (Login #:at (minutes 0) #:id "l1" [card "c1"] [country "PT"])
+                 (Login #:at (minutes 9) #:id "l2" [card "c2"] [country "US"])
+                 ;; c1 logs in from Brazil, then pays in Spain
+                 (Login #:at (minutes 24) #:id "l3" [card "c1"] [country "BR"])))
+(source declines #:types (Decline)
+  #:from (events (Decline #:at (minutes 13) #:id "d1" [card "c2"] [reason "cvv"])
+                 (Decline #:at (minutes 14) #:id "d2" [card "c2"] [reason "cvv"])
+                 (Decline #:at (minutes 15) #:id "d3" [card "c2"] [reason "cvv"])
+                 (Decline #:at (minutes 16) #:id "d4" [card "c2"] [reason "funds"])))
+(source confirmations #:types (ThreeDS)
+  #:from (events (ThreeDS #:at (minutes 21) #:id "s1" [card "c3"])))
+(source cards #:types (CardInfo)
+  #:from (events (CardInfo #:at 0 #:id "k1" [card "c1"] [holder "Ana"] [home "PT"])
+                 (CardInfo #:at 0 #:id "k2" [card "c2"] [holder "Ben"] [home "US"])
+                 (CardInfo #:at 0 #:id "k3" [card "c3"] [holder "Cy"] [home "FR"])))
+(source limits #:types (Limit)
+  #:from (events (Limit #:at 0 #:id "c1-1000" [card "c1"] [limit 1000])
+                 (Limit #:at 0 #:id "c2-1000" [card "c2"] [limit 1000])
+                 (Limit #:at 0 #:id "c3-3000" [card "c3"] [limit 3000])
+                 (Limit #:at (minutes 20) #:id "c1-2000" [card "c1"] [limit 2000])))
+
+;; JN.window: a payment and a login of the same card in the same quarter
+;; hour, from different countries
+(define-stream far-logins (from unique)
+  (join logins #:kind window #:window (tumbling #:size (minutes 15)) #:key card
+        #:on (not (equal? left.country right.country))
+        #:select ([card left.card] [amount left.amount] [paid-in left.country] [logged-in right.country])))
+
+;; JN.outer: web payments whose quarter hour has no login at all; a left
+;; outer join keeps them, with no login country
+(define-stream no-login (from unique)
+  (join logins #:kind window #:window (tumbling #:size (minutes 15)) #:key card #:outer left
+        #:select ([card left.card] [amount left.amount] [login-country right.country]))
+  (filter (not login-country)))
+
+;; JN.interval: a decline of the same card within ten minutes after a payment
+(define-stream then-declined (from unique)
+  (join declines #:kind interval #:lower 0 #:upper (minutes 10) #:key card
+        #:select ([card left.card] [amount left.amount] [reason right.reason])))
+
+;; JN.table: every payment with its card holder
+(define-stream with-holder (from payments) (join cards #:kind table #:key card))
+
+;; JN.as-of: every payment against the card's limit at the time it was made
+(define-stream against-limit (from unique)
+  (join limits #:kind as-of #:key card
+        #:select ([card left.card] [amount left.amount] [limit right.limit])))
+(define-stream over-limit (from against-limit) (filter (> amount limit)))
+
