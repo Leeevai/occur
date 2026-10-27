@@ -44,3 +44,37 @@
   (define T (make-type-registry (list Swipe Fraud)))
   (check-true (type-registry? T))
   (check-eq? (hash-ref T 'Swipe) Swipe))
+
+(spec-test 'ES.event "an instance carries id, type, payload, interval, multiplicity, source, constituents"
+  (define e (make-event 'Swipe '((card . "c1") (amount . 2)) #:id "e1" #:at 60 #:src 'feed))
+  (check-equal? (event-id e) "e1")
+  (check-equal? (event-type e) 'Swipe)
+  (check-equal? (event-attr e 'amount) 2)
+  (check-equal? (event-ts e) 60)
+  (check-equal? (event-te e) 60)
+  (check-equal? (event-t e) 60)
+  (check-equal? (event-n e) 1)
+  (check-equal? (event-src e) 'feed)
+  (check-true (event-primitive? e))
+  (check-true (event-point? e))
+  (check-equal? (event-interval e) (interval 60 60))
+  (check-exn #rx"no such attribute" (λ () (event-attr e 'merchant)))
+  (check-equal? (event-attr/default e 'merchant 'none) 'none))
+
+(spec-test 'ES.event "the interval must satisfy ts <= te and n must be natural"
+  (check-exn #rx"ts <= te" (λ () (make-event 'X '() #:ts 5 #:te 4)))
+  (check-exn exn:fail? (λ () (make-event 'X '() #:at 1 #:n -1)))
+  (check-exn #rx"needs a time" (λ () (make-event 'X '())))
+  (check-exn #rx"point events" (λ () (event-t (make-event 'X '() #:ts 1 #:te 2)))))
+
+(spec-test 'ES.event "ids are fresh and deterministic under call-with-fresh-ids"
+  (define ids (call-with-fresh-ids
+               (λ () (map event-id (list (make-event 'X '() #:at 1) (make-event 'X '() #:at 2))))))
+  (check-equal? ids '("e1" "e2"))
+  (check-equal? (call-with-fresh-ids (λ () (event-id (make-event 'X '() #:at 1)))) "e1"))
+
+(spec-test 'ES.event "functional update and printing"
+  (define e (make-event 'Swipe (hasheq 'card "c1") #:id "e1" #:at 1))
+  (check-equal? (event-attr (event-set-attr e 'card "c2") 'card) "c2")
+  (check-equal? (event-te (event-update e #:te 9)) 9)
+  (check-regexp-match #rx"#<event e1 Swipe \\[1, 1\\] card=\"c1\">" (format "~a" e)))

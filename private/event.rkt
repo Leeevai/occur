@@ -4,6 +4,7 @@
 ;; definition of the space with abstraction levels.
 (require racket/contract
          racket/list
+         racket/format
          "time.rkt")
 
 ;; ===========================================================================
@@ -130,3 +131,122 @@
   [payload-valid? (-> event-type? any/c boolean?)]
   [make-type-registry (-> (listof event-type?) type-registry?)]
   [type-registry? (-> any/c boolean?)]))
+
+;; ===========================================================================
+;; ES.event: event instances  e = ⟨id, τ, v, ts, te, n, src, C⟩
+;;
+;; `type` is the type name τ, `payload` the immutable hash v, [ts, te] the
+;; occurrence interval in event time, `n` the multiplicity, `src` the
+;; producer (a source name or an operator name), and `constituents` the list
+;; C of events this one was derived from (empty for primitive events).
+;; Arrival time arr(e) is deliberately not a field: it belongs to the runner.
+
+(struct event (id type payload ts te n src constituents)
+  #:transparent
+  #:guard (λ (id type payload ts te n src cs name)
+            (unless (and (time? ts) (time? te) (<= ts te))
+              (raise-arguments-error name "event interval must satisfy ts <= te"
+                                     "id" id "ts" ts "te" te))
+            (unless (exact-nonnegative-integer? n)
+              (raise-arguments-error name "multiplicity must be a natural number" "id" id "n" n))
+            (unless (and (hash? payload) (immutable? payload))
+              (raise-arguments-error name "payload must be an immutable hash" "id" id))
+            (values id type payload ts te n src cs))
+  #:methods gen:custom-write
+  [(define (write-proc e port mode)
+     (fprintf port "#<event ~a ~a [~a, ~a]~a~a>"
+              (event-id e) (event-type e)
+              (time->string (event-ts e)) (time->string (event-te e))
+              (if (= (event-n e) 1) "" (format " n=~a" (event-n e)))
+              (if (zero? (hash-count (event-payload e)))
+                  ""
+                  (apply string-append
+                         (for/list ([(k v) (in-hash (event-payload e))])
+                           (format " ~a=~v" k v))))))])
+
+;; Deterministic identifiers. Every id is a string made of a prefix and a
+;; counter; the runner installs its own counter so that runs are
+;; reproducible (docs/decisions/0002-deterministic-ids.md).
+(define current-id-source (make-parameter (box 0)))
+(define current-id-prefix (make-parameter "e"))
+
+(define (fresh-id [prefix (current-id-prefix)])
+  (define b (current-id-source))
+  (set-box! b (add1 (unbox b)))
+  (string-append prefix (number->string (unbox b))))
+
+(define (call-with-fresh-ids thunk #:start [start 0])
+  (parameterize ([current-id-source (box start)]) (thunk)))
+
+(define (->payload v)
+  (cond [(and (hash? v) (immutable? v) (hash-eq? v)) v]
+        [(hash? v) (for/hasheq ([(k x) (in-hash v)]) (values k x))]
+        [(list? v) (for/hasheq ([p (in-list v)]) (values (car p) (cdr p)))]
+        [else (raise-argument-error 'make-event "(or/c hash? (listof pair?))" v)]))
+
+(define (make-event type payload
+                    #:id [id #f]
+                    #:at [at #f]
+                    #:ts [ts at]
+                    #:te [te ts]
+                    #:n [n 1]
+                    #:src [src #f]
+                    #:constituents [cs '()])
+  (unless ts
+    (raise-arguments-error 'make-event "an event needs a time: give #:at or #:ts" "type" type))
+  (event (or id (fresh-id)) type (->payload payload) ts te n src cs))
+
+(define (event-attr e a)
+  (hash-ref (event-payload e) a
+            (λ () (raise-arguments-error 'event-attr "event has no such attribute"
+                                         "attribute" a "event" e))))
+(define (event-attr/default e a default) (hash-ref (event-payload e) a default))
+(define (event-has-attr? e a) (hash-has-key? (event-payload e) a))
+(define (event-point? e) (= (event-ts e) (event-te e)))
+(define (event-t e)
+  (unless (event-point? e)
+    (raise-arguments-error 'event-t "t(e) is defined only for point events" "event" e))
+  (event-ts e))
+(define (event-interval e) (interval (event-ts e) (event-te e)))
+(define (event-primitive? e) (null? (event-constituents e)))
+
+(define (event-update e
+                      #:id [id (event-id e)]
+                      #:type [type (event-type e)]
+                      #:payload [payload (event-payload e)]
+                      #:ts [ts (event-ts e)]
+                      #:te [te (event-te e)]
+                      #:n [n (event-n e)]
+                      #:src [src (event-src e)]
+                      #:constituents [cs (event-constituents e)])
+  (event id type (->payload payload) ts te n src cs))
+
+(define (event-set-attr e a v)
+  (event-update e #:payload (hash-set (event-payload e) a v)))
+
+(provide
+ (contract-out
+  [struct event ([id any/c] [type symbol?] [payload (and/c hash? immutable?)]
+                 [ts time?] [te time?] [n exact-nonnegative-integer?]
+                 [src any/c] [constituents (listof event?)])]
+  [current-id-source (parameter/c box?)]
+  [current-id-prefix (parameter/c string?)]
+  [fresh-id (->* () (string?) string?)]
+  [call-with-fresh-ids (->* ((-> any)) (#:start exact-nonnegative-integer?) any)]
+  [make-event (->* (symbol? (or/c hash? (listof pair?)))
+                   (#:id any/c #:at (or/c #f time?) #:ts (or/c #f time?) #:te (or/c #f time?)
+                    #:n exact-nonnegative-integer? #:src any/c #:constituents (listof event?))
+                   event?)]
+  [event-attr (-> event? symbol? any/c)]
+  [event-attr/default (-> event? symbol? any/c any/c)]
+  [event-has-attr? (-> event? symbol? boolean?)]
+  [event-point? (-> event? boolean?)]
+  [event-t (-> event? time?)]
+  [event-interval (-> event? interval?)]
+  [event-primitive? (-> event? boolean?)]
+  [event-update (->* (event?)
+                     (#:id any/c #:type symbol? #:payload (or/c hash? (listof pair?))
+                      #:ts time? #:te time? #:n exact-nonnegative-integer? #:src any/c
+                      #:constituents (listof event?))
+                     event?)]
+  [event-set-attr (-> event? symbol? any/c event?)]))
