@@ -85,3 +85,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and schedule conditions under deferring rate limits; `define-condition`,
   `rule-template`, `rule-source`, `bind`, and the `(rules)` stage; JSON
   Lines rule items; traces R1 and R3 to R6 of §16.7 on the runtime.
+- Checkpoint and replay (M15): `(checkpoint)` and `(restore)` script steps
+  that snapshot all runner state and re-read the input retained since, and
+  `(cold-start)`, which rebuilds state from all retained input with
+  processing-time timers suspended, holds outputs back until the first
+  rules push, coalesces them per operator instance, and judges them against
+  the instances then in force; a rule source's name is bound to its items.
