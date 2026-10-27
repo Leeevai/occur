@@ -75,3 +75,19 @@
                           (list in)))
   (check-equal? (length (run-result-events r)) 1)
   (check-equal? (run-result-counter r 'op 'unenriched) 1))
+
+(spec-test '(OP.split ES.batch) "a write covering several sensors splits into one batch event per sensor"
+  (define write (make-event 'Write `((sensors . (,(hasheq 'id "s1" 'n 3 'first 0 'last 2)
+                                                 ,(hasheq 'id "s2" 'n 5 'first 1 'last 9))))
+                            #:id "w" #:ts 0 #:te 9))
+  (define op (split-operator
+              (λ (e) (for/list ([s (event-attr e 'sensors)])
+                       (make-batch-event 'Reading `((sensor . ,(hash-ref s 'id)))
+                                         #:ts (hash-ref s 'first) #:te (hash-ref s 'last)
+                                         #:n (hash-ref s 'n))))))
+  (define out (run1 op (list write)))
+  (check-equal? (map (λ (e) (event-attr e 'sensor)) out) '("s1" "s2"))
+  (check-equal? (map event-n out) '(3 5))
+  (check-equal? (map (λ (e) (list (event-ts e) (event-te e))) out) '((0 2) (1 9)))
+  (check-true (andmap (λ (e) (equal? (map event-id (event-constituents e)) '("w"))) out))
+  (check-false (equal? (event-id (car out)) (event-id (cadr out)))))

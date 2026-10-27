@@ -111,3 +111,19 @@
                         (#:missing (or/c 'keep 'drop) #:type (or/c #f symbol?))
                         operator?)]
   [table-lookup (-> hash? (-> any/c any/c))]))
+
+;; ---------------------------------------------------------------------------
+;; OP.split: e ↦ {e₁, …, eₙ} = f(e). f returns the children as events; each
+;; child gets a fresh id and C = {e}. A write covering five sensors becomes
+;; one batch event per sensor.
+
+(define (split-operator f)
+  (stateless-operator
+   'split
+   (λ (e c)
+     (for ([child (in-list (f e))])
+       (emit! c (event-update child #:id (fresh-id) #:src 'split #:constituents (list e)))))))
+
+(provide
+ (contract-out
+  [split-operator (-> (-> event? (listof event?)) operator?)]))
