@@ -250,7 +250,8 @@
                 #:condition (condition (->sym (hash-ref c 'type))
                                        (for/hasheq ([(k v) (in-hash c)] #:unless (eq? k 'type))
                                          (values k (if (and (eq? k 'mode) (string? v)) (string->symbol v) v))))
-                #:watch (let ([w (hash-ref h 'watch #f)]) (and w (map ->sym w)))
+                ;; kinds stay strings, as the kinds of JSON data are
+                #:watch (hash-ref h 'watch #f)
                 #:modifiers (for/hasheq ([kv (list (let ([r (hash-ref h 'rate_limit #f)])
                                                      (and r (cons 'rate-limit (cons (car r) (->sym (cadr r))))))
                                                    (let ([f (hash-ref h 'flush #f)]) (and f (cons 'flush f)))
@@ -263,7 +264,7 @@
                 #:on-update (->sym (hash-ref h 'on_update "restart")))]
     [("binding")
      (make-binding (hash-ref h 'rule) #:on (hash-ref h 'on) #:key (hash-ref h 'key "")
-                   #:watch (let ([w (hash-ref h 'watch #f)]) (and w (map ->sym w)))
+                   #:watch (hash-ref h 'watch #f)
                    #:overrides (hash-ref h 'overrides (hasheq)) #:params (hash-ref h 'params (hasheq)))]
     [("remove-rule") (removal 'rule (hash-ref h 'id))]
     [("remove-binding") (removal 'binding (list (hash-ref h 'rule) (hash-ref h 'on) (hash-ref h 'key "")))]
