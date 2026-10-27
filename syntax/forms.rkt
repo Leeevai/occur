@@ -59,8 +59,9 @@
                    [derived? (and (attribute derived) #t)])
        #'(begin
            (define rt (make-event-type 'name (list (cons 'attr dom-expr) ...) #:derived? derived?))
-           (define-syntax name (type-static 'name '((attr . dom-datum) ...) 'kind (quote-syntax rt)))
-           (registry-add-type! occur-registry rt)))]))
+           ;; a type is a value of the module, not part of its program, so a
+           ;; module of types alone stays a library
+           (define-syntax name (type-static 'name '((attr . dom-datum) ...) 'kind (quote-syntax rt)))))]))
 
 ;; ---------------------------------------------------------------------------
 ;; (source name #:types (T ...) #:from data #:watermark strategy)   ES.stream

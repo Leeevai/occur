@@ -520,3 +520,14 @@
                      (by-node r 'triggers))
                 (list (list 1000 "threshold" 'config '(500 500) 0 (hasheq 'threshold 40))
                       (list 1020 "threshold" 'samples '(500 520) 3 (hasheq 'threshold 40)))))
+
+(require (only-in "lang/uses-libs.rkt" [occur-run uses-libs-run])
+         racket/runtime-path)
+(define-runtime-path lib-a-path "lang/lib-a.rkt")
+
+(spec-test 'ES.stream "a module that declares nothing to run is a library: two of them can be required together"
+  (dynamic-require lib-a-path #f)
+  (define-values (vars stxs) (module->exports lib-a-path))
+  (define exported (for*/list ([phase+names (append vars stxs)] [n (cdr phase+names)]) (car n)))
+  (check-equal? (sort exported symbol<?) '(Ping ping))
+  (check-equal? (map (λ (e) (event-attr e 'dev)) (by-node (uses-libs-run) 'all-pings)) '("d1" "d2")))
