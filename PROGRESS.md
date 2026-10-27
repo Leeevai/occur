@@ -11,7 +11,7 @@ This file is the resume point for work on occur. Read it, together with
 | M2 | `#lang occur` skeleton and scripted runner | §2, §6 | done |
 | M3 | Single-event operations | §4 | done |
 | M4 | Stream structure, including high-water-mark merging | §5 | done |
-| M5 | Time and progress | §6 | todo |
+| M5 | Time and progress | §6 | done (TM.checkpoint and TM.replay come with M15) |
 | M6 | Windows and contexts | §7 | todo |
 | M7 | Aggregation | §8 | todo |
 | M8 | Joins | §9 | todo |
@@ -29,11 +29,11 @@ This file is the resume point for work on occur. Read it, together with
 
 ## Next step
 
-M5: time and progress in `private/progress.rkt` and `private/scheduler.rkt`:
-event/processing/hybrid clocks, global and keyed watermarks
-(`W^any`/`W^all`), idleness, the future-skew guard, lateness policies,
-timers, five-field UTC cron schedules with coalesced missed ticks, and
-retraction, each with a surface form.
+M6: windows and contexts in `private/window.rkt` and `private/context.rkt`:
+tumbling, sliding, session, count, landmark, punctuated, since-last, and
+calendar windows; empty windows; window firing with allowed lateness and
+keyed watermarks; temporal, segmentation, spatial, state, entity-lifecycle,
+activation, and composite contexts; with surface stages.
 
 Notes:
 - Hosted CI runs are blocked by the account's GitHub billing; every commit
