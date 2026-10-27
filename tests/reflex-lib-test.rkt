@@ -11,6 +11,13 @@
   (define ns (eval-occur (string-append "#lang occur\n(require occur/lib/reflex)\n" body "\n(provide found)\n")))
   (eval 'found ns))
 
+;; Run such a module, a program, and evaluate `extract` with its run result
+;; bound to r, in the module's namespace.
+(define (run-in body extract)
+  (define ns (eval-occur (string-append "#lang occur\n(require occur/lib/reflex)\n" body "\n")))
+  (eval '(require occur) ns)
+  (eval `(let ([r (occur-run)]) ,extract) ns))
+
 (define (condition-of expr)
   (found-in (format "(define c ~a)\n(define found (list (condition-kind c) (condition-params c)))" expr)))
 
@@ -62,3 +69,31 @@
                 '(("d1" . active) ("d2" . inactive) ("d3" . removed)))
   (check-equal? (found-in "(define found (directory-msg-entries (step:control-msg (push-devices 'devices '((\"d1\" . deleted)) #:mode 'patch))))")
                 (hash "d1" 'removed)))
+
+(spec-test '(OP.split ES.batch ES.reference ST.key-by ES.substream TM.skew-guard CX.entity ST.monotonic-merge)
+           "define-reflex normalizes each data arrival into merged per-sensor contributions of the owning device"
+  (define found
+    (run-in
+     (string-append
+      "(define-devices devices [\"d1\" watched] [\"d2\" deprecated])\n"
+      "(define-reflex #:arrivals arrivals #:devices devices #:contributions contributions #:triggers triggers)\n"
+      ;; one write listing three sensors: two owned by d1, one by d2
+      "(script #:final-watermark? #f\n"
+      " (at 100 arrivals (data-arrival 100\n"
+      "   (sensor-write #:owner \"d1\" #:sensor \"s1\" #:type \"load\" #:n 3 #:first 90 #:last 99 #:newest 7)\n"
+      "   (sensor-write #:owner \"d2\" #:sensor \"s2\" #:type \"load\" #:n 1 #:first 95)\n"
+      "   (sensor-write #:owner \"d1\" #:sensor \"s3\" #:type \"temperature\" #:n 1 #:first 9000)))\n"
+      " (at 110 arrivals (data-arrival 110\n"
+      "   (sensor-write #:owner \"d1\" #:sensor \"s1\" #:type \"load\" #:n 3 #:first 90 #:last 99))))\n")
+     '(list (for/list ([o (run-result-outputs r)] #:when (eq? (output-node o) 'contributions))
+              (define e (output-item o))
+              (list (output-key o) (event-attr e 'sensor) (event-attr e 'type) (event-ts e) (event-te e) (event-n e)
+                    (data-ref-substream (event-reference e)) (data-ref-summary (event-reference e))))
+            ;; each counter, summed over the stages of the program
+            (for/list ([name '(future-skew ignored late)])
+              (for/sum ([c (in-hash-values (run-result-counters r))]) (hash-ref c name 0))))))
+  (define-values (contributions counts) (apply values found))
+  ;; keyed by the owner; the sensor is the sub-stream and a reference to its samples
+  (check-equal? contributions '(("d1" "s1" "load" 90 99 3 "s1" #hasheq((newest . 7)))))
+  ;; s3 is over an hour ahead; d2 is deprecated; the repeated write is behind the mark
+  (check-equal? counts '(1 1 3)))

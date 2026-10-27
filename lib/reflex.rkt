@@ -8,10 +8,11 @@
 ;; (tests/reflex-purity.rkt checks the first).
 (require (for-syntax racket/base syntax/parse))
 (provide DataArrival SensorData Trigger
-         sensor-write
+         data-arrival sensor-write
          define-devices push-devices
          accumulate window silence cron
-         reflex-rule)
+         reflex-rule
+         define-reflex)
 
 ;; ---------------------------------------------------------------------------
 ;; §16.1 Inputs
@@ -28,6 +29,9 @@
 (define (sensor-write #:owner owner #:sensor sensor #:type type #:n n
                       #:first first-ts #:last [last-ts first-ts] #:newest [newest #f])
   (hasheq 'owner owner 'sensor sensor 'type type 'n n 'first_ts first-ts 'last_ts last-ts 'newest newest))
+
+;; The DataArrival of a storage write committed at t.
+(define (data-arrival t . writes) (DataArrival #:at t [writes writes]))
 
 ;; The device directory (CX.entity). A device is watched (it can report, and
 ;; is activated before it sends anything, CX.activation), deprecated (its
@@ -154,3 +158,56 @@
   [interval : Any] [samples : Integer] [windows : Integer] [sources : Any]
   [params : Any] [emitted-at : Time] [identity : String]
   #:derived)
+
+;; ---------------------------------------------------------------------------
+;; The program (§16.1–§16.3)
+;;
+;; (define-reflex #:arrivals name maybe-from #:devices directory
+;;                #:contributions name #:triggers name)
+;; declares, in the enclosing module, the DataArrival source `arrivals`
+;; (with #:from data, its data; otherwise a script feeds it), the stream of
+;; merged per-sensor contributions, and the trigger stream:
+;;
+;;   arrivals → split per sensor → key by owning device → skew guard
+;;            → device directory → high-water-mark merge     = contributions
+;;   contributions → rules → Trigger, delivered by device    = triggers
+;;
+;; Every operator is keyed by device and none reads another device's state
+;; (ES.keyed), so the program scales by partition.
+
+(define-syntax (define-reflex stx)
+  (syntax-parse stx
+    [(_ (~alt (~once (~seq #:arrivals arrivals:id)) (~optional (~seq #:from data))
+              (~once (~seq #:devices devices:id)) (~once (~seq #:contributions contributions:id))
+              (~once (~seq #:triggers triggers:id)))
+        ...)
+     #`(begin
+         (source arrivals #:types (DataArrival) #,@(if (attribute data) (list #'#:from #'data) '()))
+         (define-stream contributions (from arrivals)
+           ;; OP.split: one batch event per sensor written (ES.batch), a
+           ;; reference to its samples with the newest value (ES.reference)
+           (split SensorData #:for ([w writes])
+                  [owner (hash-ref w 'owner)] [sensor (hash-ref w 'sensor)] [type (hash-ref w 'type)]
+                  #:ts (hash-ref w 'first_ts) #:te (hash-ref w 'last_ts) #:n (hash-ref w 'n)
+                  #:reference (hash-ref w 'sensor) #:summary ([newest (hash-ref w 'newest)]))
+           ;; ST.key-by the device that owns the sensor, not the one that sent
+           ;; the write; sensors are its sub-streams, types their kinds
+           (key-by owner #:substream sensor #:kind type)
+           ;; TM.skew-guard: drop and count data stamped over an hour ahead
+           (skew-guard (hours 1))
+           ;; CX.entity: watched devices are active from the start; a
+           ;; deprecated device's arrivals are ignored and counted
+           (context (entity devices))
+           ;; ST.monotonic-merge per sensor: its contributions are all the
+           ;; conditions see, so replays and duplicate writes converge
+           (monotonic-merge))
+         (define-stream triggers (from contributions)
+           ;; the rule instances in force on each device (§14)
+           (rules)
+           ;; DR.derive with DR.summary: the trigger's fields
+           (map Trigger [target target] [device key] [binding-key binding-key] [reason reason]
+                [interval window] [samples samples] [windows windows] [sources sources]
+                [params params] [emitted-at emitted-at] [identity identity])
+           ;; DR.ordered: delivered grouped by device
+           (key-by device)))]))
+
