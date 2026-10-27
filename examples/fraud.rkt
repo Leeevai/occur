@@ -171,3 +171,87 @@
         #:select ([card left.card] [amount left.amount] [limit right.limit])))
 (define-stream over-limit (from against-limit) (filter (> amount limit)))
 
+
+;; ---------------------------------------------------------------------------
+;; Patterns (§11, §12)
+
+(event-type Alert [card : String] [reason : String] #:derived)
+
+;; everything a card does, in one stream: payments, declines, logins, and
+;; 3-D Secure confirmations
+(define-stream activity (merge unique till declines logins confirmations))
+
+;; PT.absence: a large payment with no 3-D Secure confirmation within two
+;; minutes (p5 and p10; c3 confirmed p7)
+(define-pattern unconfirmed #:from activity #:key card
+  (seq (p : Payment (>= amount 1000)) (absent ThreeDS #:within (minutes 2)))
+  #:emit (Alert [card p.card] [reason "unconfirmed"]))
+
+;; PT.conjunction: a login and a large payment of the same card, in either
+;; order, within five minutes, from different countries
+(define-pattern login-and-payment #:from activity #:key card #:within (minutes 5)
+  (and (l : Login) (p : Payment (>= amount 1000)))
+  #:where (not (equal? l.country p.country))
+  #:emit (Alert [card p.card] [reason "far-login"]))
+
+;; PT.disjunction: a decline for lack of funds, or a payment over 2000
+(define-pattern funds-or-huge #:from activity #:key card
+  (or (d : Decline (equal? reason "funds")) (p : Payment (> amount 2000))))
+
+;; PT.any: two of three signals within a quarter hour
+(define-pattern two-signals #:from activity #:key card #:within (minutes 15) #:output first
+  (any 2 (p : Payment (>= amount 1000)) (l : Login (equal? country "BR")) (d : Decline)))
+
+;; PT.kleene-star: a small payment, any declines, then a large payment
+(define-pattern small-then-large #:from activity #:key card #:within (minutes 30)
+  #:selection next #:output maximal
+  (seq (a : Payment (< amount 50)) (kleene* (d : Decline)) (b : Payment (>= amount 1000))))
+
+;; PT.repeat: three to five declines within ten minutes, reported once
+(define-pattern decline-burst #:from activity #:key card #:within (minutes 10)
+  #:output first #:skip past-last
+  (repeat (d : Decline) 3 5))
+
+;; PT.threshold: three payments within half an hour whose total crosses 2000
+(define-pattern big-spree #:from activity #:key card #:within (minutes 30)
+  #:selection next #:output first
+  (repeat (p : Payment) 3)
+  #:where (crosses? (sum p.amount) '> 2000))
+
+;; Consumption (CON.*): which login explains a large payment
+(define-syntax-rule (login-then-large name consumption)
+  (define-pattern name #:from activity #:key card #:within (minutes 30) #:consumption consumption
+    (seq (l : Login) (p : Payment (>= amount 1000)))))
+(login-then-large any-login unrestricted)   ; c1: l1 and l3 with p10
+(login-then-large latest-login recent)      ; c1: only l3, the most recent
+(login-then-large oldest-login chronicle)   ; c1: only l1, the oldest, once
+(login-then-large every-login continuous)   ; c1: both, consumed together
+
+;; Output (OUT.first, OUT.last): after a small payment, the large ones
+(define-pattern first-large #:from activity #:key card #:within (minutes 30) #:output first
+  (seq (a : Payment (< amount 100)) (kleene+ (b : Payment (>= amount 500)))))
+(define-pattern last-large #:from activity #:key card #:within (minutes 30) #:output last
+  (seq (a : Payment (< amount 100)) (kleene+ (b : Payment (>= amount 500)))))
+
+;; Skipping (SKIP.*): runs of declines, under each after-match skip strategy
+(define-syntax-rule (decline-runs name skip)
+  (define-pattern name #:from activity #:key card #:within (minutes 10) #:skip skip
+    (kleene+ (d : Decline)) #:where (>= (count d) 2)))
+(decline-runs runs-no-skip no-skip)
+(decline-runs runs-to-next to-next)
+(decline-runs runs-past-last past-last)
+(decline-runs runs-to-first (to-first d))
+(decline-runs runs-to-last (to-last d))
+
+;; EVAL.immediate: a payment followed by a decline is reported as soon as
+;; the decline arrives, without waiting for the watermark
+(define-pattern declined-soon-after #:from activity #:key card #:within (minutes 5) #:eval immediate
+  (seq (p : Payment) (d : Decline)))
+
+;; CON.retain with OUT.timeout-partial: five declines make a lock-out; a run
+;; that stops short is reported after ten minutes, and keeps counting
+(define-pattern lockout #:from activity #:key card #:within (hours 1)
+  #:selection next #:output first
+  #:timeout-partial ((minutes 10) processing-time) #:retain (timeout)
+  (kleene+ (d : Decline))
+  #:where (>= (count d) 5))
