@@ -82,3 +82,32 @@
 
 ;; TM.timer: a payment settles five minutes after it is made
 (define-stream settled (from unique) (delay (minutes 5)))
+
+;; ---------------------------------------------------------------------------
+;; Spending per card (§7, §8)
+
+;; WN.sliding: each card's last 30 minutes, every 10 minutes
+(define-stream spend-30m (from unique)
+  (key-by card)
+  (window (sliding #:size (minutes 30) #:slide (minutes 10)))
+  (aggregate [payments (count)] [total (sum amount)] [mean (avg amount)]
+             [smallest (min amount)] [largest (max amount)] [spread (stddev amount)]))
+
+;; WN.session: a card's bursts of activity, separated by 10 quiet minutes
+(define-stream sessions (from unique)
+  (key-by card)
+  (window (session #:gap (minutes 10)))
+  (aggregate [payments (events)] [first-merchant (first merchant)] [last-merchant (last merchant)]
+             [merchants (collect merchant)] [biggest (argmax amount)] [smallest (argmin amount)]))
+
+;; WN.count with AG.incremental: after each payment, the last three, kept by
+;; adding the new one and removing the oldest
+(define-stream last-3 (from unique)
+  (window (count #:size 3 #:step 1))
+  (aggregate [total (sum amount)] [variance (variance amount)]))
+
+;; holistic and approximate aggregates over the whole day's payments
+(define-stream daily (from unique)
+  (window (tumbling #:size (hours 24)))
+  (aggregate [median (median amount)] [p90 (percentile amount 0.9)] [cards (count-distinct card)]
+             [usual (mode merchant)] [top-2 (top-k amount 2)] [approx-cards (approx-distinct card)]))
