@@ -105,6 +105,47 @@
        (check-true (<= (cadr a) (car b))))
      (check-true (<= (apply + 0 (map caddr out)) (apply + 0 (map event-n xs)))))))
 
+(define (owned id owner sensor ts te n)
+  (make-batch-event 'Reading `((owner . ,owner) (sensor . ,sensor)) #:id id #:ts ts #:te te #:n n))
+(define gen:owned
+  (gen:let ([specs (gen:list (gen:tuple (gen:one-of '("d1" "d2")) (gen:one-of '("s1" "s2")) (gen:integer-in 0 50)
+                                        (gen:integer-in 0 20) (gen:integer-in 0 12))
+                             #:max-length 12)])
+    (for/list ([s specs] [i (in-naturals)])
+      (owned (format "e~a" i) (car s) (string-append (car s) "-" (cadr s)) (caddr s) (+ (caddr s) (cadddr s)) (list-ref s 4)))))
+(define (owned-out op xs)
+  (map (λ (e) (list (event-attr e 'sensor) (event-ts e) (event-te e) (event-n e)))
+       (run-result-events (run-operator op (list xs) #:arrivals (list (for/list ([i (length xs)]) i))))))
+
+(spec-test '(ST.monotonic-merge ES.substream) "property: keyed by entity, the merge emits what the per-sub-stream merge emits"
+  (check-property
+   (make-config #:tests (trials))
+   (property ([xs gen:owned])
+     (define sensor (λ (e) (event-attr e 'sensor)))
+     (check-equal? (owned-out (monotonic-merge-operator sensor #:entity (λ (e) (event-attr e 'owner))) xs)
+                   (owned-out (monotonic-merge-operator sensor) xs)))))
+
+(require "../private/context.rkt")
+
+(spec-test '(ST.monotonic-merge CX.entity) "keyed by entity, the merge forgets a removed entity's high-water marks"
+  (define (program)
+    (define src (make-source 'in))
+    (define gate (make-node 'gate (entity-context-operator 'devices #:key (λ (e) (event-attr e 'owner))) (list src)))
+    (define m (make-node 'm (monotonic-merge-operator (λ (e) (event-attr e 'sensor)) #:entity (λ (e) (event-attr e 'owner)))
+                         (list gate) #:sink? #t))
+    (make-program (list m)))
+  (define steps (list (directory-push 'devices '(("d1" . active)) #:at 0)
+                      (arrive 1 'in (owned "a" "d1" "s1" 90 100 10))
+                      (directory-push 'devices '() #:at 2)                       ; d1 removed
+                      (directory-push 'devices '(("d1" . active)) #:at 3)        ; and listed again
+                      (arrive 4 'in (owned "b" "d1" "s1" 80 90 10))))
+  ;; activated afresh, d1's sensor starts from −∞ again, so [80, 90] is new
+  (check-equal? (map event-n (run-result-events (run (program) steps))) '(10 10))
+  ;; without the removal, [80, 90] is behind the mark and dropped
+  (define kept (run (program) (list (car steps) (cadr steps) (last steps))))
+  (check-equal? (map event-n (run-result-events kept)) '(10))
+  (check-equal? (run-result-counter kept 'm 'late) 10))
+
 (spec-test 'ST.reorder "reorder releases buffered events in event-time order at the watermark"
   (define src (make-source 'in))
   (define n (make-node 'r (reorder-operator) (list src) #:sink? #t))

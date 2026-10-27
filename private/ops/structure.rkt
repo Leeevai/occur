@@ -78,29 +78,46 @@
 
 (struct hwm-state (hw late contributions) #:transparent)
 
-(define (monotonic-merge-operator substream-fn)
-  (make-operator
-   'monotonic-merge
-   #:key substream-fn
-   #:init-key (λ (g k c) (hwm-state -inf.0 0 0))
-   #:on-event
-   (λ (g s e c)
-     (define hw (hwm-state-hw s))
-     (define new (batch-share e hw))
-     (define dropped (- (event-n e) new))
-     (when (> dropped 0) (count! c 'late dropped))
-     (cond
-       [(> new 0)
-        (emit! c (event-update e #:id (fresh-id) #:ts (time-max (event-ts e) hw) #:n new
-                               #:src 'monotonic-merge #:constituents (list e)))
-        (hwm-state (event-te e) (+ (hwm-state-late s) dropped) (add1 (hwm-state-contributions s)))]
-       [else (hwm-state hw (+ (hwm-state-late s) dropped) (hwm-state-contributions s))]))))
+;; One arrival on a sub-stream with state s: the new state.
+(define (merge-step s e c)
+  (define hw (hwm-state-hw s))
+  (define new (batch-share e hw))
+  (define dropped (- (event-n e) new))
+  (when (> dropped 0) (count! c 'late dropped))
+  (cond
+    [(> new 0)
+     (emit! c (event-update e #:id (fresh-id) #:ts (time-max (event-ts e) hw) #:n new
+                            #:src 'monotonic-merge #:constituents (list e)))
+     (hwm-state (event-te e) (+ (hwm-state-late s) dropped) (add1 (hwm-state-contributions s)))]
+    [else (hwm-state hw (+ (hwm-state-late s) dropped) (hwm-state-contributions s))]))
+
+(define initial-hwm (hwm-state -inf.0 0 0))
+
+;; Keyed by sub-stream; with #:entity, keyed by the entity that owns the
+;; sub-streams, with one high-water mark per sub-stream inside the entity's
+;; state, so that dropping an entity (CX.entity) forgets its marks.
+(define (monotonic-merge-operator substream-fn #:entity [entity-fn #f])
+  (if entity-fn
+      (make-operator
+       'monotonic-merge
+       #:key entity-fn
+       #:lifecycle? #t
+       #:init-key (λ (g k c) (hash))
+       #:on-event
+       (λ (g marks e c)
+         (define sub (substream-fn e))
+         (hash-set marks sub (merge-step (hash-ref marks sub initial-hwm) e c))))
+      (make-operator
+       'monotonic-merge
+       #:key substream-fn
+       #:init-key (λ (g k c) initial-hwm)
+       #:on-event (λ (g s e c) (merge-step s e c)))))
 
 (provide
  (contract-out
   [struct hwm-state ([hw time?] [late exact-nonnegative-integer?]
                      [contributions exact-nonnegative-integer?])]
-  [monotonic-merge-operator (-> (-> event? any/c) operator?)]))
+  [monotonic-merge-operator (->* ((-> event? any/c)) (#:entity (or/c #f (-> event? any/c))) operator?)]))
 
 ;; ---------------------------------------------------------------------------
 ;; ST.reorder: buffer events and release them in event-time order up to the
