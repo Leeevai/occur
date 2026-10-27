@@ -25,3 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `event-type`, `source`, `define-stream` (`from`), and `script`, and
   compile-time schema checks with source locations; the first manual
   sections.
+- Single-event operations (M3): `filter`, `project`, `map`, `enrich`,
+  `split`, and `route` as runtime operators and `define-stream` stages, with
+  attributes bound as variables in stage expressions and compile-time checks
+  against the stream's shape.
