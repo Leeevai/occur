@@ -39,3 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   heartbeat watermarks, five-field UTC cron schedules with coalesced missed
   ticks (`define-schedule`), generator nodes, and retractions in source
   data.
+- Windows and contexts (M6): tumbling, sliding, session, count, landmark,
+  punctuated, since-last, and calendar windows; empty windows; allowed
+  lateness with corrections; windows closing on the processing clock or
+  under keyed watermarks; temporal, segmentation, spatial, state, composite,
+  and entity-lifecycle contexts with activation signals; directories.
