@@ -53,3 +53,27 @@
   (define r (run (make-program (list n)) (list (arrive 100 'in (ev "y" 'Y 100 "d")) (advance-to 2000))
                  #:final-watermark? #f))
   (check-equal? (map output-at (run-result-outputs r)) '(700)))
+
+(require "../private/pattern/policies.rkt")
+
+(spec-test '(ES.keyed SEL.strict SEL.partition) "the reference operator reads strict contiguity over all keys"
+  (define p (seq (prim 'A #:bind 'a) (prim 'B #:bind 'b)))
+  (define κ (λ (e) (event-attr e 'k)))
+  (define events (list (ev "a1" 'A 1 "x") (ev "a2" 'A 2 "y") (ev "b1" 'B 3 "x") (ev "b2" 'B 4 "y")))
+  (check-equal? (operator-matches (reference-pattern-operator p #:key κ #:selection 'strict) events) '())
+  (check-equal? (operator-matches (reference-pattern-operator p #:key κ #:selection 'partition) events)
+                '(("a1" "b1") ("a2" "b2"))))
+
+(spec-test '(ES.keyed SEL.strict SEL.partition SEL.next SEL.any OUT.every OUT.maximal)
+           "property: under each selection strategy and every or maximal output, the operators agree per key"
+  (check-property
+   (make-config #:tests (trials))
+   (property ([seed (gen:integer-in 0 1000000)] [h gen:point-history]
+              [s (gen:one-of selection-strategies)] [o (gen:one-of '(every maximal))])
+     (define p (random-pattern seed))
+     (define keyed (for/list ([e h] [i (in-naturals)]) (event-set-attr e 'k (if (even? i) "x" "y"))))
+     (define κ (λ (e) (event-attr e 'k)))
+     (check-equal? (operator-matches (incremental-pattern-operator p #:key κ #:selection s
+                                                                   #:policy (make-match-policy #:output o))
+                                     keyed)
+                   (operator-matches (reference-pattern-operator p #:key κ #:selection s #:output o) keyed)))))

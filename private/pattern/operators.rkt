@@ -36,7 +36,8 @@
                     [else v]))))
 
 (define (reference-pattern-operator p #:key [key #f] #:derive [derive (λ (m) (derive-match m))]
-                                    #:horizon [horizon #f])
+                                    #:horizon [horizon #f]
+                                    #:selection [selection 'any] #:output [output 'every])
   (define problem (pattern-problem p))
   (when problem (raise-arguments-error 'reference-pattern-operator problem))
   (make-operator
@@ -45,18 +46,21 @@
    #:key key
    #:lifecycle? #t
    #:init-global (λ () -inf.0)                            ; the newest finite watermark
-   #:init-key (λ (g k c) (cons (ctx-now c) '()))          ; (activation instant . history, newest first)
-   #:on-event (λ (g st e c) (cons (car st) (cons e (cdr st))))
+   ;; (activation instant, history newest first, id -> arrival index over all keys)
+   #:init-key (λ (g k c) (list (ctx-now c) '() (hash)))
+   #:on-event (λ (g st e c) (list (car st) (cons e (cadr st)) (hash-set (caddr st) (event-id e) (ctx-seq c))))
    #:on-watermark (λ (g keys W c) (values (if (< W +inf.0) (time-max g W) g) keys))
    #:event-deadline (λ (st) +inf.0)
    #:on-timer
    (λ (g st c)
      (cond
        [(eqv? (ctx-watermark c) +inf.0)
-        (define history (reverse (cdr st)))
+        (define history (reverse (cadr st)))
         ;; the evaluation horizon: the newest finite watermark or end time
         (define h (or horizon (time-max g (for/fold ([m -inf.0]) ([e history]) (time-max m (event-te e))))))
-        (for ([m (in-list (denote p history #:activation (car st) #:horizon h))])
+        (define ms (select-matches (denote p history #:activation (car st) #:horizon h) selection history
+                                   #:global-index (caddr st)))
+        (for ([m (in-list (if (eq? output 'maximal) (maximal-matches ms) ms))])
           (emit! c (derive m)))
         #f]
        [else st]))))
@@ -66,7 +70,9 @@
   [derive-match (->* (pmatch?) (#:type symbol? #:payload (-> hash? hash?) #:src any/c) event?)]
   [default-match-payload (-> hash? hash?)]
   [reference-pattern-operator (->* (pat?) (#:key (or/c #f (-> event? any/c)) #:derive (-> pmatch? event?)
-                                          #:horizon (or/c #f time?))
+                                          #:horizon (or/c #f time?)
+                                          #:selection (or/c 'strict 'partition 'next 'any)
+                                          #:output (or/c 'every 'maximal))
                                    operator?)]))
 
 ;; ---------------------------------------------------------------------------
@@ -145,9 +151,10 @@
   (cond [(and a b) (if (< (deadline-time a) (deadline-time b)) a b)] [else (or a b)]))
 
 ;; ---------------------------------------------------------------------------
-;; The pattern operator used by #lang occur. The reference engine implements
-;; the most permissive semantics (SEL.any, CON.unrestricted, OUT.every,
-;; SKIP.no-skip, EVAL.deferred); other policies need the incremental engine.
+;; The pattern operator used by #lang occur. The reference engine evaluates
+;; the oracle once the stream is complete, so it implements every selection
+;; strategy with every or maximal output, under unrestricted consumption and
+;; no skipping; other policies need the incremental engine.
 
 (define default-policies
   (hasheq 'selection 'any 'consumption 'unrestricted 'output 'every 'skip 'no-skip 'eval #f))
@@ -165,11 +172,16 @@
                                   #:retain (hash-ref ps 'retain '())))]
     [(reference)
      (for ([(k v) (in-hash ps)])
-       (unless (equal? v (hash-ref default-policies k #f))
+       (unless (or (equal? v (hash-ref default-policies k #f))
+                   (and (eq? k 'selection) (memq v selection-strategies))
+                   (and (eq? k 'output) (eq? v 'maximal))
+                   (and (eq? k 'eval) (eq? v 'deferred)))
          (raise-arguments-error 'pattern-operator
-                                "the reference engine implements only the most permissive semantics; use the incremental engine"
+                                (string-append "the reference engine implements the selection strategies with every or maximal"
+                                               " output, under unrestricted consumption and no skipping; use the incremental engine")
                                 "policy" k "value" v)))
-     (reference-pattern-operator p #:key key #:derive derive)]
+     (reference-pattern-operator p #:key key #:derive derive
+                                 #:selection (hash-ref ps 'selection) #:output (hash-ref ps 'output))]
     [else (raise-arguments-error 'pattern-operator "unknown engine" "engine" engine)]))
 
 (provide
