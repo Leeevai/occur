@@ -663,7 +663,10 @@
                (module-relative-path (variable-reference->module-source (#%variable-reference)) path))]
            [t:id #:when (template-static? (lookup-static #'t)) (template-static-runtime-id (lookup-static #'t))]
            [_ (raise-syntax-error 'rule-source "expected a template, (bind …), or (jsonl path)" stx it)])))
-     #`(registry-add-setup! occur-registry
-                            (list (control (rule-source-msg 'name (flatten-items (list #,@items)) 'replace) #:config? #t)))]))
+     ;; the source's name is bound to its items, so a script can push it again
+     #`(begin
+         (define name (flatten-items (list #,@items)))
+         (registry-add-setup! occur-registry
+                              (list (control (rule-source-msg 'name name 'replace) #:config? #t))))]))
 
 (define (flatten-items xs) (append* (map (λ (x) (if (list? x) x (list x))) xs)))
