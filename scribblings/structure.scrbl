@@ -12,9 +12,15 @@ ordered.
 interleaved by arrival. As the first stage it merges the named streams;
 later it merges the pipeline so far with them.}
 
-@specform[(key-by attr)]{@tt{ST.key-by}: partitions the stream by an
-attribute. Downstream stateful stages run per key. @racket[(key-by #:fn expr)]
-keys by any expression. Re-keying is the same operation.}
+@specform[(key-by attr maybe-substream)
+          #:grammar ([maybe-substream (code:line) (code:line #:substream sub-attr)
+                                      (code:line #:substream sub-attr #:kind kind-attr)])]{
+@tt{ST.key-by}: partitions the stream by an attribute. Downstream stateful
+stages run per key. @racket[(key-by #:fn expr)] keys by any expression.
+Re-keying is the same operation. With @racket[#:substream] and
+@racket[#:kind], the key is an entity that owns sub-streams, each of a kind
+(@tt{ES.substream}), as a source's @racket[#:key], @racket[#:substream], and
+@racket[#:kind] declare them; the merge and the rules node read them.}
 
 @specform[(dedupe maybe-key #:horizon duration maybe-clock)
           #:grammar ([maybe-key (code:line) (code:line #:key expr)]
@@ -28,7 +34,8 @@ within the horizon. The default key is the event id.}
 @tt{ST.monotonic-merge}: high-water-mark merging per sub-stream. Downstream
 stages see contributions: the share of each arrival past the sub-stream's
 newest time. Data wholly behind the mark is dropped and counted as
-@tt{late}.}
+@tt{late}. On a stream with an entity, the merge is keyed by the entity, so
+dropping the entity (@tt{CX.entity}) forgets its sub-streams' marks.}
 
 @specform[(reorder maybe-late)
           #:grammar ([maybe-late (code:line) (code:line #:late drop) (code:line #:late emit)])]{
@@ -52,9 +59,12 @@ source see the merged contributions.
 @defproc[(dedupe-operator [key (-> event? any/c)] [#:horizon h duration?]
                           [#:clock clock (or/c 'event-time 'processing-time) 'event-time])
          operator?]{}
-@defproc[(monotonic-merge-operator [substream (-> event? any/c)]) operator?]{The
-per-key state is a @racket[hwm-state] with the high-water mark, the late
-count, and the number of contributions.}
+@defproc[(monotonic-merge-operator [substream (-> event? any/c)]
+                                   [#:entity entity (or/c #f (-> event? any/c)) #f])
+         operator?]{The per-sub-stream state is a @racket[hwm-state] with the
+high-water mark, the late count, and the number of contributions. With
+@racket[#:entity], the operator is keyed by the entity and keeps a hash from
+sub-stream to @racket[hwm-state].}
 @defproc[(reorder-operator [#:key key (or/c #f (-> event? any/c)) #f]
                            [#:late late (or/c 'drop 'emit) 'drop])
          operator?]{}

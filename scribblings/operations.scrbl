@@ -37,9 +37,16 @@ or adds attributes and keeps the event's type.}
 @tt{OP.enrich}: e ⊕ R(k(e)), where @racket[lookup] is a hash or a procedure
 from the key to the attributes to add.}
 
-@specform[(split type #:for (for-clause ...) [attr expr] ... #:ts expr time-option ...)]{
+@specform[(split type #:for (for-clause ...) [attr expr] ... #:ts expr time-option ... maybe-reference)
+          #:grammar ([maybe-reference (code:line)
+                                      (code:line #:reference substream-expr)
+                                      (code:line #:reference substream-expr #:summary ([key expr] ...))])]{
 @tt{OP.split}: e ↦ {e₁, …, eₙ}, one child of @racket[type] per iteration of
-the @racket[for] clauses, each with a fresh id.}
+the @racket[for] clauses, each with a fresh id. With @racket[#:reference],
+each child is a reference event (@tt{ES.reference}): its @racket[ref]
+attribute names the sub-stream and the child's interval, with the summary,
+in place of the samples; later stages read it through @racket[ref], for
+example @racket[(hash-ref (data-ref-summary ref) 'newest)].}
 
 @specform[(route maybe-mode [branch expr] ...+ maybe-otherwise)
           #:grammar ([maybe-mode (code:line) (code:line #:mode exclusive) (code:line #:mode inclusive)]
