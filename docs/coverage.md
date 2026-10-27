@@ -94,19 +94,19 @@ Status values: `todo`, `partial`, `done`.
 | `JN.table` | §9 | `(join t #:kind table #:key a)` | `table-join-operator` (private/join.rkt) | tests/join-test.rkt, tests/lang-test.rkt |  | partial |
 | `JN.as-of` | §9 | `(join v #:kind as-of #:key a #:valid-from e)` | `as-of-join-operator` (private/join.rkt) | tests/join-test.rkt, tests/lang-test.rkt |  | partial |
 | `JN.outer` | §9 | `#:outer left/right/full` on a join | `#:outer` of the join operators (private/join.rkt) | tests/join-test.rkt, tests/lang-test.rkt |  | partial |
-| `AL.before` | §10 | | | | | todo |
-| `AL.after` | §10 | | | | | todo |
-| `AL.meets` | §10 | | | | | todo |
-| `AL.met-by` | §10 | | | | | todo |
-| `AL.overlaps` | §10 | | | | | todo |
-| `AL.overlapped-by` | §10 | | | | | todo |
-| `AL.starts` | §10 | | | | | todo |
-| `AL.started-by` | §10 | | | | | todo |
-| `AL.during` | §10 | | | | | todo |
-| `AL.contains` | §10 | | | | | todo |
-| `AL.finishes` | §10 | | | | | todo |
-| `AL.finished-by` | §10 | | | | | todo |
-| `AL.equals` | §10 | | | | | todo |
+| `AL.before` | §10 | `(before? a b)` / `(allen-relation a b)` in stage and pattern expressions | `before?` `allen-relation` (private/allen.rkt) | tests/allen-test.rkt, tests/lang-test.rkt |  | partial |
+| `AL.after` | §10 | `(after? a b)` / `(allen-relation a b)` in stage and pattern expressions | `after?` `allen-relation` (private/allen.rkt) | tests/allen-test.rkt, tests/lang-test.rkt |  | partial |
+| `AL.meets` | §10 | `(meets? a b)` / `(allen-relation a b)` in stage and pattern expressions | `meets?` `allen-relation` (private/allen.rkt) | tests/allen-test.rkt, tests/lang-test.rkt |  | partial |
+| `AL.met-by` | §10 | `(met-by? a b)` / `(allen-relation a b)` in stage and pattern expressions | `met-by?` `allen-relation` (private/allen.rkt) | tests/allen-test.rkt, tests/lang-test.rkt |  | partial |
+| `AL.overlaps` | §10 | `(overlaps? a b)` / `(allen-relation a b)` in stage and pattern expressions | `overlaps?` `allen-relation` (private/allen.rkt) | tests/allen-test.rkt, tests/lang-test.rkt |  | partial |
+| `AL.overlapped-by` | §10 | `(overlapped-by? a b)` / `(allen-relation a b)` in stage and pattern expressions | `overlapped-by?` `allen-relation` (private/allen.rkt) | tests/allen-test.rkt, tests/lang-test.rkt |  | partial |
+| `AL.starts` | §10 | `(starts? a b)` / `(allen-relation a b)` in stage and pattern expressions | `starts?` `allen-relation` (private/allen.rkt) | tests/allen-test.rkt, tests/lang-test.rkt |  | partial |
+| `AL.started-by` | §10 | `(started-by? a b)` / `(allen-relation a b)` in stage and pattern expressions | `started-by?` `allen-relation` (private/allen.rkt) | tests/allen-test.rkt, tests/lang-test.rkt |  | partial |
+| `AL.during` | §10 | `(during? a b)` / `(allen-relation a b)` in stage and pattern expressions | `during?` `allen-relation` (private/allen.rkt) | tests/allen-test.rkt, tests/lang-test.rkt |  | partial |
+| `AL.contains` | §10 | `(contains? a b)` / `(allen-relation a b)` in stage and pattern expressions | `contains?` `allen-relation` (private/allen.rkt) | tests/allen-test.rkt, tests/lang-test.rkt |  | partial |
+| `AL.finishes` | §10 | `(finishes? a b)` / `(allen-relation a b)` in stage and pattern expressions | `finishes?` `allen-relation` (private/allen.rkt) | tests/allen-test.rkt, tests/lang-test.rkt |  | partial |
+| `AL.finished-by` | §10 | `(finished-by? a b)` / `(allen-relation a b)` in stage and pattern expressions | `finished-by?` `allen-relation` (private/allen.rkt) | tests/allen-test.rkt, tests/lang-test.rkt |  | partial |
+| `AL.equals` | §10 | `(equals? a b)` / `(allen-relation a b)` in stage and pattern expressions | `equals?` `allen-relation` (private/allen.rkt) | tests/allen-test.rkt, tests/lang-test.rkt |  | partial |
 | `PT.sequence` | §11 | | | | | todo |
 | `PT.primitive` | §11 | | | | | todo |
 | `PT.activation` | §11 | | | | | todo |
