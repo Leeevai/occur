@@ -22,20 +22,23 @@ This file is the resume point for work on occur. Read it, together with
 | M13 | Derivation | §13 | done |
 | M14 | Rules as data | §14 | done |
 | M15 | Checkpoint, restore, and replay | §6 | done |
-| M16 | Acceptance: card testing | §15 | todo |
+| M16 | Acceptance: card testing | §15 | done |
 | M17 | Acceptance: Reflex | §16 | todo |
 | M18 | Examples, Scribble docs, README, full coverage | all | todo |
 | M19 | Release v0.1.0 | all | todo |
 
 ## Next step
 
-M16: the card-testing acceptance of §15 as `examples/card-testing.rkt`
-(with its traces as JSON Lines data) and `tests/card-testing-test.rkt`:
-trace A's table for every selection strategy under every and maximal
-output, the derived SuspectedFraud(c1, 2, 1500) with ts 1, te 4, and
-C = {e1, e2, e4} emitted once the watermark passes 11 minutes; trace A′
-with ¬Verified scoped to the gap and `unless Verified` over the span;
-trace B with no match under any strategy; engine and oracle agree.
+M17: Reflex as `lib/reflex.rkt`, written in `#lang occur` with public
+forms only (`tests/reflex-purity.rkt` rejects any `private/` require):
+the DataArrival normalization of §16.1 (split per sensor, key by owning
+device, sensors as sub-streams and types as kinds, skew guard, device
+directory, high-water-mark merge), the four conditions of §16.2 as named
+conditions with Reflex's parameter names, a rule template form mapping
+`max_delay`, `reset_on_max_delay`, `min_interval`, and `on_update`, the
+trigger output of §16.3, and the fleet health view; `examples/reflex/`
+with rule sources and traces R1 to R6 as data; one test commit per trace;
+`docs/reflex.md` realizing §16.6 row by row.
 
 Notes:
 - Hosted CI runs on every push (GitHub Actions, `.github/workflows/ci.yml`)
