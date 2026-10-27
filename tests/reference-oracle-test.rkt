@@ -143,3 +143,36 @@
   (check-equal? (map pmatch-te (denote (periodic S 10 E) (list (ev "s" 'S 0) (ev "e" 'E 30)))) '(10 20))
   ;; without a close, ticks run up to the horizon
   (check-equal? (map pmatch-te (denote (periodic S 10 E) (list (ev "s" 'S 0)) #:horizon 25)) '(10 20)))
+
+;; ---------------------------------------------------------------------------
+;; Spec §15 under the most permissive semantics (SEL.any, CON.unrestricted,
+;; OUT.every): the oracle reproduces the any/every cells of traces A, A′, B.
+
+(define (swipe id t amount) (ev id 'Swipe (* 60 t) `((card . "c1") (amount . ,amount))))
+(define (verified id t) (ev id 'Verified (* 60 t) '((card . "c1"))))
+(define (amounts bs) (map (λ (b) (event-attr b 'amount)) bs))
+(define (increasing? xs) (or (null? xs) (null? (cdr xs)) (and (< (car xs) (cadr xs)) (increasing? (cdr xs)))))
+
+(define (card-testing #:negation [mode 'between])
+  (define a (prim 'Swipe #:bind 'a #:when (λ (e) (< (event-attr e 'amount) 5))))
+  (define b (kleene+ (prim 'Swipe #:bind 'b #:when (λ (e) (> (event-attr e 'amount) 500)))))
+  (define body (if (eq? mode 'between) (neg-between a (prim 'Verified) b) (seq a b)))
+  (define p (within (where body (λ (bs) (increasing? (amounts (hash-ref bs 'b))))) (* 60 10)))
+  (if (eq? mode 'span) (span-absence p (prim 'Verified)) p))
+
+(define trace-a (list (swipe "e1" 1 2) (swipe "e2" 2 600) (swipe "e3" 3 50) (swipe "e4" 4 900)))
+
+(spec-test '(PT.sequence PT.negation PT.kleene-plus PT.where PT.within)
+           "trace A (§15): under skip-till-any-match every increasing subset of {e2, e4} follows e1"
+  (check-equal? (id-set (denote (card-testing) trace-a))
+                (set-of '("e1" "e2") '("e1" "e4") '("e1" "e2" "e4"))))
+
+(spec-test '(PT.negation PT.span-absence) "trace A′ (§15): the scope of ¬Verified versus unless Verified"
+  (define a-prime (append trace-a (list (verified "v" 3.5))))
+  (check-equal? (id-set (denote (card-testing) a-prime)) (set-of '("e1" "e2") '("e1" "e2" "e4")))
+  (check-equal? (id-set (denote (card-testing #:negation 'span) a-prime)) (set-of '("e1" "e2"))))
+
+(spec-test 'PT.negation "trace B (§15): a verification between the swipes prevents every match"
+  (define trace-b (list (ev "s1" 'Swipe 60 '((card . "c2") (amount . 1))) (ev "v" 'Verified 120 '((card . "c2")))
+                        (ev "s2" 'Swipe 180 '((card . "c2") (amount . 800)))))
+  (check-equal? (denote (card-testing) trace-b) '()))
