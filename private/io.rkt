@@ -7,6 +7,7 @@
 ;;   "t"     a point time, or "ts" and "te" for an interval
 ;;   "n"     the multiplicity (default 1)
 ;;   "at"    the processing (arrival) time (default te)
+;; A line {"retract": id, "at": t} retracts the earlier event with that id.
 ;; Every other key is a payload attribute, decoded by the type's schema:
 ;; a Time given as an ISO-8601 string becomes seconds, a Location is an
 ;; object {"x": .., "y": ..}, records are objects, and lists are arrays.
@@ -19,7 +20,7 @@
          "event.rkt"
          "operator.rkt")
 
-(struct arrival (at event) #:transparent)
+(struct arrival (at event) #:transparent)   ; event: an event or a retraction
 
 (define reserved '(type id t ts te n at))
 
@@ -42,6 +43,17 @@
 
 ;; jsexpr->arrival : hash types -> arrival
 (define (jsexpr->arrival h types #:where [where "?"])
+  (cond
+    [(hash-ref h 'retract #f)
+     => (λ (id) (arrival (json->time (or (hash-ref h 'at #f) 0)) (retraction-of id)))]
+    [else (jsexpr->event-arrival h types where)]))
+
+;; ⊖e for the earlier event with the given id. Retraction propagates by id,
+;; so the stub carries only the id.
+(define (retraction-of id)
+  (retraction (make-event 'Retracted '() #:id id #:at 0)))
+
+(define (jsexpr->event-arrival h types where)
   (define type-name
     (cond [(hash-ref h 'type #f) => string->symbol]
           [(= (length types) 1) (event-type-name (car types))]
@@ -93,7 +105,8 @@
 
 (provide
  (contract-out
-  [struct arrival ([at time?] [event event?])]
+  [struct arrival ([at time?] [event (or/c event? retraction?)])]
+  [retraction-of (-> any/c retraction?)]
   [jsexpr->arrival (->* (hash? (listof event-type?)) (#:where string?) arrival?)]
   [read-jsonl-arrivals (-> path-string? (listof event-type?) (listof arrival?))]
   [event->string (-> event? string?)]

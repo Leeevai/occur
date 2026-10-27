@@ -35,7 +35,9 @@
   (define d (source-data s))
   (cond [(not d) '()]
         [else (for/list ([x (in-list (d))])
-                (if (arrival? x) x (arrival (event-te x) x)))]))
+                (cond [(arrival? x) x]
+                      [(retraction? x) (arrival 0 x)]
+                      [else (arrival (event-te x) x)]))]))
 
 (define (registry-steps r)
   (append

@@ -123,3 +123,26 @@
   (check-equal? (map output-at (run-result-outputs r)) (list (clock-at 13 10) (clock-at 14 0)))
   (check-equal? (map (λ (e) (list (event-attr e 'ticks) (event-ts e) (event-te e))) (run-result-events r))
                 (list (list 3 (clock-at 11 0) (clock-at 13 0)) (list 1 (clock-at 14 0) (clock-at 14 0)))))
+
+(spec-test '(TM.idle TM.watermark) "a heartbeat source advances its watermark while data is idle"
+  (define src (make-source 'in #:watermark '(heartbeat Heartbeat)))
+  (define n (make-node 'd (delay-operator 0) (list src) #:sink? #t))
+  (define r (run (make-program (list n))
+                 (list (arrive 1 'in (pt "a" 5))
+                       (arrive 50 'in (make-event 'Heartbeat '() #:id "hb" #:at 50)))
+                 #:final-watermark? #f))
+  (check-equal? (map event-id (run-result-events r)) '("a" "hb"))
+  (check-equal? (hash-ref (run-result-watermarks r) 'in) 50))
+
+(require "../private/io.rkt" "../private/ops/stateless.rkt")
+
+(spec-test 'TM.retraction "a retraction in the data cancels the event and everything derived from it"
+  (define src (make-source 'in))
+  (define m (make-node 'm (map-operator (λ (e) (hasheq 'v 1)) #:type 'D) (list src) #:sink? #t))
+  (define r (run (make-program (list m))
+                 (list (arrive 1 'in (pt "a" 1)) (arrive 2 'in (pt "b" 2)) (arrive 3 'in (retraction-of "a")))))
+  (define items (map output-item (run-result-outputs r)))
+  (check-equal? (length items) 3)
+  (check-true (retraction? (caddr items)))
+  (check-equal? (map event-id (event-constituents (retraction-event (caddr items)))) '("a"))
+  (check-equal? (arrival-event (jsexpr->arrival (hasheq 'retract "a" 'at 9) '())) (retraction-of "a")))

@@ -18,7 +18,9 @@
 ;; Sources and nodes
 
 ;; watermark strategy: 'none (explicit watermark steps only), 'ascending
-;; (W = max te seen), or (list 'bounded-delay d) (W = max te seen − d).
+;; (W = max te seen), (list 'bounded-delay d) (W = max te seen − d), or
+;; (list 'heartbeat T) (W = te of the newest event of type T, a source that
+;; emits heartbeats while idle, TM.idle).
 (struct source (name types watermark data meta) #:transparent)
 
 (define (make-source name
@@ -154,6 +156,8 @@
 ;; ===========================================================================
 ;; Script steps
 
+;; An arrival carries an event, or a retraction ⊖e of an earlier event
+;; (TM.retraction).
 (struct step:arrive (time source event) #:transparent)
 (struct step:advance (time) #:transparent)
 (struct step:watermark (source time) #:transparent)
@@ -438,13 +442,16 @@
        (raise-arguments-error 'run "arrival for an unknown source" "source" src))
      (for ([d (in-list (hash-ref (program-downstream prog) (cons src 0) '()))])
        (deliver! r (car d) (cdr d) e))
-     (define strategy (source-watermark (hash-ref (program-sources prog) src)))
-     (define maxte (time-max (hash-ref (runner-maxte r) src -inf.0) (event-te e)))
-     (set-runner-maxte! r (hash-set (runner-maxte r) src maxte))
-     (match strategy
-       ['ascending (advance-source-watermark! r src maxte)]
-       [(list 'bounded-delay d) (advance-source-watermark! r src (- maxte d))]
-       [_ (void)])]
+     (when (event? e)
+       (define strategy (source-watermark (hash-ref (program-sources prog) src)))
+       (define maxte (time-max (hash-ref (runner-maxte r) src -inf.0) (event-te e)))
+       (set-runner-maxte! r (hash-set (runner-maxte r) src maxte))
+       (match strategy
+         ['ascending (advance-source-watermark! r src maxte)]
+         [(list 'bounded-delay d) (advance-source-watermark! r src (- maxte d))]
+         [(list 'heartbeat type) (when (eq? (event-type e) type)
+                                   (advance-source-watermark! r src (event-te e)))]
+         [_ (void)]))]
     [(step:advance _) (void)]
     [(step:watermark src w)
      (unless (hash-ref (program-sources prog) src #f)
@@ -526,12 +533,12 @@
   [struct program ([sources hash?] [nodes hash?] [order (listof symbol?)] [inputs hash?]
                    [downstream hash?])]
   [make-program (-> list? program?)]
-  [arrive (-> time? symbol? event? step:arrive?)]
+  [arrive (-> time? symbol? (or/c event? retraction?) step:arrive?)]
   [advance-to (-> time? step:advance?)]
   [watermark-to (-> symbol? time? step:watermark?)]
   [control (->* (any/c) (#:at (or/c #f time?) #:to symbol? #:config? boolean?) step:control?)]
   [suspend (-> time? time? step:suspend?)]
-  [struct step:arrive ([time time?] [source symbol?] [event event?])]
+  [struct step:arrive ([time time?] [source symbol?] [event (or/c event? retraction?)])]
   [struct step:advance ([time time?])]
   [struct step:watermark ([source symbol?] [time time?])]
   [struct step:control ([time (or/c #f time?)] [target symbol?] [msg any/c] [config? boolean?])]
