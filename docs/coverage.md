@@ -51,22 +51,22 @@ Status values: `todo`, `partial`, `done`.
 | `TM.retraction` | §6 | `(retraction-of id)` in source data; JSON Lines `{"retract": id}` | `retraction` items, provenance propagation, `emit-correction!` (private/dataflow.rkt, private/progress.rkt) | tests/dataflow-test.rkt, tests/progress-test.rkt, tests/lang-test.rkt |  | partial |
 | `TM.checkpoint` | §6 | | | | | todo |
 | `TM.replay` | §6 | | | | | todo |
-| `WN.tumbling` | §7 | | | | | todo |
-| `WN.sliding` | §7 | | | | | todo |
-| `WN.session` | §7 | | | | | todo |
-| `WN.count` | §7 | | | | | todo |
-| `WN.landmark` | §7 | | | | | todo |
-| `WN.punctuated` | §7 | | | | | todo |
-| `WN.since-last` | §7 | | | | | todo |
-| `WN.calendar` | §7 | | | | | todo |
-| `WN.empty` | §7 | | | | | todo |
-| `CX.temporal` | §7 | | | | | todo |
-| `CX.segmentation` | §7 | | | | | todo |
-| `CX.spatial` | §7 | | | | | todo |
-| `CX.state` | §7 | | | | | todo |
-| `CX.entity` | §7 | | | | | todo |
-| `CX.activation` | §7 | | | | | todo |
-| `CX.composite` | §7 | | | | | todo |
+| `WN.tumbling` | §7 | `(window (tumbling #:size d #:offset o) ...)` | `grid-window-operator` `tumbling` (private/window.rkt) | tests/window-test.rkt, tests/window-prop-test.rkt, tests/lang-test.rkt |  | partial |
+| `WN.sliding` | §7 | `(window (sliding #:size d #:slide s) ...)` | `grid-window-operator` `sliding` (private/window.rkt) | tests/window-test.rkt, tests/window-prop-test.rkt, tests/lang-test.rkt |  | partial |
+| `WN.session` | §7 | `(window (session #:gap g))` | `session-window-operator` (private/window.rkt) | tests/window-test.rkt, tests/window-prop-test.rkt, tests/lang-test.rkt |  | partial |
+| `WN.count` | §7 | `(window (count #:size n #:step m))` | `count-window-operator` (private/window.rkt) | tests/window-test.rkt, tests/window-prop-test.rkt, tests/lang-test.rkt |  | partial |
+| `WN.landmark` | §7 | `(window (landmark #:from t0))` | `landmark-window-operator` (private/window.rkt) | tests/window-test.rkt, tests/lang-test.rkt |  | partial |
+| `WN.punctuated` | §7 | `(window (punctuated #:open e #:close e #:timeout d))` | `punctuated-window-operator` (private/window.rkt) | tests/window-test.rkt, tests/lang-test.rkt |  | partial |
+| `WN.since-last` | §7 | `(window (since-last #:when e))` | `since-last-window-operator` (private/window.rkt) | tests/window-test.rkt, tests/lang-test.rkt |  | partial |
+| `WN.calendar` | §7 | `(window (calendar "cron" #:clock c))` | `calendar-window-operator` (private/window.rkt) | tests/window-test.rkt, tests/lang-test.rkt |  | partial |
+| `WN.empty` | §7 | `#:fire-empty` window option; calendar windows fire empty by default | `grid-window-operator #:fire-empty?` (private/window.rkt) | tests/window-test.rkt, tests/lang-test.rkt |  | partial |
+| `CX.temporal` | §7 | `(context (fixed-interval ...))` `(event-interval ...)` `(sliding-interval ...)` `(sliding-event-interval ...)` | `fixed-interval-context` `event-interval-context` ... (private/context.rkt) | tests/context-test.rkt, tests/lang-test.rkt |  | partial |
+| `CX.segmentation` | §7 | `(context (segment a ...))` | `segmentation-context` (private/context.rkt) | tests/context-test.rkt, tests/lang-test.rkt |  | partial |
+| `CX.spatial` | §7 | `(context (near ...))` `(near-entity ...)` `(near-event ...)` | `fixed-location-context` `entity-distance-context` `event-distance-context` (private/context.rkt) | tests/context-test.rkt, tests/lang-test.rkt |  | partial |
+| `CX.state` | §7 | `(context (state #:from s #:active e))` | `state-context-operator` (private/context.rkt) | tests/context-test.rkt, tests/lang-test.rkt |  | partial |
+| `CX.entity` | §7 | `(directory d #:from ...)`, source `#:directory d`, `(context (entity d))` | `entity-context-operator` `directory-push` (private/context.rkt) | tests/context-test.rkt, tests/lang-test.rkt |  | partial |
+| `CX.activation` | §7 | `(activations)` stage; lifecycle `activate` signals | `signal` with the activation instant, `activations-operator` (private/context.rkt) | tests/context-test.rkt, tests/lang-test.rkt |  | partial |
+| `CX.composite` | §7 | `(context (and c ...))` | `composite-context` (private/context.rkt) | tests/context-test.rkt, tests/lang-test.rkt |  | partial |
 | `AG.count` | §8 | | | | | todo |
 | `AG.multiplicity` | §8 | | | | | todo |
 | `AG.events` | §8 | | | | | todo |
@@ -88,7 +88,7 @@ Status values: `todo`, `partial`, `done`.
 | `AG.mode` | §8 | | | | | todo |
 | `AG.top-k` | §8 | | | | | todo |
 | `AG.approx` | §8 | | | | | todo |
-| `AG.incremental` | §8 | | | | | todo |
+| `AG.incremental` | §8 | (M7) | accumulator `remove` in count windows (private/window.rkt) | tests/window-test.rkt, tests/window-prop-test.rkt |  | partial |
 | `JN.window` | §9 | | | | | todo |
 | `JN.interval` | §9 | | | | | todo |
 | `JN.table` | §9 | | | | | todo |
