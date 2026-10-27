@@ -23,8 +23,8 @@ Status values: `todo`, `partial`, `done`.
 | `ES.causality` | §2 | (M13) | `causality-from-events` `causes?` (private/relations.rkt) | tests/relations-test.rkt |  | partial |
 | `ES.stream` | §2 | `(source s #:types (T ...) #:from ...)` | `make-event-stream` (private/stream.rkt) | tests/stream-test.rkt, tests/io-test.rkt, tests/lang-test.rkt |  | partial |
 | `ES.history` | §2 | (M2) | `history` (private/stream.rkt) | tests/stream-test.rkt |  | partial |
-| `ES.keyed` | §2 | (M4) `(key-by attr)` | `partition-stream` (private/stream.rkt) | tests/stream-test.rkt |  | partial |
-| `ES.substream` | §2 | (M4) `#:key` `#:substream` `#:kind` | `attribute-keying` `watching` (private/stream.rkt) | tests/stream-test.rkt |  | partial |
+| `ES.keyed` | §2 | `(key-by attr)`; source `#:key` | `partition-stream` (private/stream.rkt) | tests/stream-test.rkt, tests/keyed-prop-test.rkt |  | partial |
+| `ES.substream` | §2 | source `#:key` `#:substream` `#:kind` | `attribute-keying` `watching` (private/stream.rkt) | tests/stream-test.rkt, tests/lang-test.rkt |  | partial |
 | `ES.operator` | §2 | `define-stream` stages compile to operators | `make-operator` `run-operator` (private/operator.rkt, private/dataflow.rkt) | tests/operator-test.rkt, tests/dataflow-test.rkt |  | partial |
 | `OP.filter` | §4 | `(filter expr)` stage | `filter-operator` (private/ops/stateless.rkt) | tests/stateless-test.rkt, tests/stateless-prop-test.rkt, tests/lang-test.rkt |  | partial |
 | `OP.project` | §4 | `(project a ... #:as T)` stage | `project-operator` (private/ops/stateless.rkt) | tests/stateless-test.rkt, tests/stateless-prop-test.rkt, tests/lang-test.rkt |  | partial |
@@ -32,13 +32,13 @@ Status values: `todo`, `partial`, `done`.
 | `OP.enrich` | §4 | `(enrich #:key k #:with R #:adds (...))` stage | `enrich-operator` `table-lookup` (private/ops/stateless.rkt) | tests/stateless-test.rkt, tests/lang-test.rkt |  | partial |
 | `OP.split` | §4 | `(split T #:for (...) [a e] ... #:ts e)` stage | `split-operator` (private/ops/stateless.rkt) | tests/stateless-test.rkt, tests/stateless-prop-test.rkt, tests/lang-test.rkt |  | partial |
 | `OP.route` | §4 | `(route #:mode m [b p] ... #:otherwise b)` final stage | `route-operator` (private/ops/stateless.rkt) | tests/stateless-test.rkt, tests/stateless-prop-test.rkt, tests/lang-test.rkt |  | partial |
-| `ST.monotonic-merge` | §5 | | | | | todo |
-| `ST.merge` | §5 | | | | | todo |
-| `ST.key-by` | §5 | | | | | todo |
-| `ST.dedupe` | §5 | | | | | todo |
-| `ST.reorder` | §5 | | | | | todo |
-| `ST.throttle` | §5 | | | | | todo |
-| `TM.clock` | §6 | | | | | todo |
+| `ST.monotonic-merge` | §5 | `(monotonic-merge)` stage; source `#:merge high-water-mark` | `monotonic-merge-operator` `hwm-state` (private/ops/structure.rkt) | tests/structure-test.rkt (R2, properties), tests/lang-test.rkt |  | partial |
+| `ST.merge` | §5 | `(merge s ...)` stage | `merge-operator` (private/ops/structure.rkt) | tests/structure-test.rkt, tests/lang-test.rkt |  | partial |
+| `ST.key-by` | §5 | `(key-by attr)` / `(key-by #:fn e)` stage; source `#:key` | `key-by-operator` (private/ops/structure.rkt) | tests/structure-test.rkt, tests/keyed-prop-test.rkt, tests/lang-test.rkt |  | partial |
+| `ST.dedupe` | §5 | `(dedupe #:key e #:horizon d #:clock c)` stage | `dedupe-operator` (private/ops/structure.rkt) | tests/structure-test.rkt, tests/lang-test.rkt |  | partial |
+| `ST.reorder` | §5 | `(reorder #:late drop)` stage | `reorder-operator` (private/ops/structure.rkt) | tests/structure-test.rkt, tests/lang-test.rkt |  | partial |
+| `ST.throttle` | §5 | `(throttle #:rate r #:per d)` / `#:every n` / `#:probability p #:seed s` | `throttle-operator` (private/ops/structure.rkt) | tests/structure-test.rkt, tests/lang-test.rkt |  | partial |
+| `TM.clock` | §6 | `#:clock event-time|processing-time|hybrid` (checked at compile time) | `clock?` (private/time.rkt) | tests/time-test.rkt, tests/lang-test.rkt |  | partial |
 | `TM.lateness` | §6 | | | | | todo |
 | `TM.keyed-watermark` | §6 | | | | | todo |
 | `TM.event-time` | §6 | | | | | todo |
