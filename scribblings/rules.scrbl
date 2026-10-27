@@ -22,8 +22,10 @@ parameters; they arrive and change while the engine runs.
 @defform[(define-condition name #:kind kind #:parameters ([keyword param maybe-default maybe-override] ...)
                            maybe-positional)]{Declares condition vocabulary
 (@tt{RL.template}). Parameters marked @racket[#:override] may be overridden
-by bindings (@tt{RL.binding}). @racket[(define-condition name #:as other #:rename ([kw other-kw] ...))]
-renames another condition's keywords. The core conditions are
+by bindings (@tt{RL.binding}). @racket[(define-condition name #:as other #:rename ([kw other-kw maybe-convert] ...))]
+renames another condition's keywords, and may convert a value with a
+procedure, as @racket[[#:require-all #:mode (λ (all?) (if all? 'all 'any))]]
+does; an overridable parameter cannot be converted. The core conditions are
 @racket[pt:accumulate] (@tt{PT.accumulate}), @racket[pt:window-close]
 (@tt{PT.window-close}), @racket[pt:silence] (@tt{PT.silence},
 @tt{PT.recovery}), and @racket[pt:schedule] (@tt{PT.schedule}).}
@@ -32,13 +34,20 @@ renames another condition's keywords. The core conditions are
 @racket[#:watch], @racket[#:rate-limit (d mode)] (@tt{OUT.rate-limit}),
 @racket[#:flush d] (@tt{PT.flush}), @racket[#:retain (max_delay)]
 (@tt{CON.retain}), @racket[#:target], @racket[#:params],
-@racket[#:applies-to], and @racket[#:on-update] (@tt{RL.carry}).}
+@racket[#:applies-to], @racket[#:on-update] (@tt{RL.carry}), @racket[#:id]
+(the rule id, by default the template's name), and @racket[#:in-source]. A
+template is in force from the start, unless it has @racket[#:in-source]:
+then only while a rule source that lists it is. Two templates with one
+@racket[#:id] are two versions of a rule.}
 
-@defform[(rule-source name item ...)]{Items are templates,
+@defform[(rule-source name maybe-at-start item ...)
+         #:grammar ([maybe-at-start (code:line) (code:line #:at-start? bool)])]{Items are templates,
 @racket[(bind template #:on key option ...)] bindings (@tt{RL.binding},
 @tt{RL.fan-out} with @racket[#:also]), and @racket[(jsonl path)] data
-(@tt{RL.source}). Sources are pushed at start; scripts push replacements and
-patches with @racket[rule-source-push]. Ownership (@tt{RL.ownership}),
+(@tt{RL.source}). Sources are pushed at start, unless
+@racket[#:at-start? #f]; @racket[name] is bound to the items, and scripts
+push replacements and patches with @racket[rule-source-push], so an edit is
+@racket[(rule-source-push 'alarms alarms/edited)]. Ownership (@tt{RL.ownership}),
 dangling and invalid items (@tt{RL.dangling}), instance identity
 (@tt{RL.identity}), fingerprints (@tt{RL.semantics}), re-judging
 (@tt{RL.rejudge}), and convergence (@tt{RL.converge}) follow §14.}

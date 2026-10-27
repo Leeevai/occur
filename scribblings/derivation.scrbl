@@ -25,11 +25,19 @@ Spec §13.
  @item{@tt{DR.retract}: retracting a constituent retracts what was derived
        from it.}]
 
-@defform[(define-view name #:from stream maybe-key #:init expr #:update expr maybe-export)
+@defform[(define-view name #:from stream maybe-key #:init expr #:update expr
+                      maybe-project maybe-export maybe-lifecycle)
          #:grammar ([maybe-key (code:line) (code:line #:key attr)]
-                    [maybe-export (code:line) (code:line #:export-every duration)])]{
+                    [maybe-project (code:line) (code:line #:project expr)]
+                    [maybe-export (code:line) (code:line #:export-every duration)]
+                    [maybe-lifecycle (code:line) (code:line #:lifecycle? bool)])]{
 @racket[#:update] sees @racket[state], @racket[now], @racket[it], and the
-event's attributes.}
+event's attributes. With @racket[#:project], the view exports the
+projection, which sees @racket[state], @racket[now], @racket[last-arrival],
+and @racket[newest], as a health classification needs:
+@racket[(classify-health #:now now #:last-arrival last-arrival #:newest newest #:live 30 #:silent 120 #:stale 60)].
+A view follows its entities' lifecycle unless @racket[#:lifecycle? #f], as
+for a view keyed by something other than the entity.}
 
 @defform[(act name #:on stream #:do expr maybe-completion)
          #:grammar ([maybe-completion (code:line) (code:line #:completion type)])]{}
