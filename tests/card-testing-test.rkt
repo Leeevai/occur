@@ -54,3 +54,14 @@
            "trace A′ (§15): ¬Verified scopes the gap before the first b; unless Verified scopes the span"
   (check-equal? (matches r 'gap-negation) '(("e1" "e2") ("e1" "e2" "e4")))
   (check-equal? (matches r 'span-negation) '(("e1" "e2"))))
+
+(spec-test '(PT.negation SEL.strict SEL.partition SEL.next SEL.any)
+           "trace B (§15): no match under any strategy, and the verification is what prevents it"
+  (for ([node '(b-strict b-partition b-next b-any)])
+    (check-equal? (matches r node) '() (format "~a" node)))
+  ;; without the verification the same swipes match under every strategy
+  (define unverified
+    (filter (λ (s) (not (and (step:arrive? s) (equal? (event-id (step:arrive-event s)) "f2")))) (ex:occur-steps)))
+  (define r2 (run (ex:occur-program) unverified))
+  (for ([node '(b-strict b-partition b-next b-any)])
+    (check-equal? (matches r2 node) '(("f1" "f3")) (format "~a" node))))
