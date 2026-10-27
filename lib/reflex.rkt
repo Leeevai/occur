@@ -12,7 +12,8 @@
          define-devices push-devices
          accumulate window silence cron
          reflex-rule
-         define-reflex)
+         define-reflex
+         define-fleet-health)
 
 ;; ---------------------------------------------------------------------------
 ;; §16.1 Inputs
@@ -210,4 +211,32 @@
                 [params params] [emitted-at emitted-at] [identity identity])
            ;; DR.ordered: delivered grouped by device
            (key-by device)))]))
+
+;; ---------------------------------------------------------------------------
+;; Fleet health (§16.3)
+;;
+;; (define-fleet-health name #:from contributions #:per device | sensor
+;;                      #:live d #:silent d #:stale d)
+;; A DR.view of the health of each device, or each sensor, by arrival age
+;; (now − last arrival) and data age (now − newest sample time): silent when
+;; nothing arrived for #:silent seconds (or ever), quiet after #:live
+;; seconds, late when arriving but with data older than #:stale seconds,
+;; else live; exported every minute (TM.schedule). A watched device that has
+;; sent nothing is silent; sensors are known only once they report.
+
+(define-syntax (define-fleet-health stx)
+  (syntax-parse stx
+    [(_ name:id (~alt (~once (~seq #:from up:id))
+                      (~once (~seq #:per (~and per (~or* (~datum device) (~datum sensor)))))
+                      (~once (~seq #:live live:expr)) (~once (~seq #:silent silent:expr))
+                      (~once (~seq #:stale stale:expr)))
+        ...)
+     (define device? (eq? (syntax-e #'per) 'device))
+     #`(define-view name #:from up #:key #,(if device? #'owner #'sensor)
+         #:init #f #:update state
+         #:project (classify-health #:now now #:last-arrival last-arrival #:newest newest
+                                    #:live live #:silent silent #:stale stale)
+         #:export-every 60
+         ;; a device view follows the directory; a sensor view does not
+         #:lifecycle? #,(if device? #'#t #'#f))]))
 

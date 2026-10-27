@@ -97,3 +97,24 @@
   (check-equal? contributions '(("d1" "s1" "load" 90 99 3 "s1" #hasheq((newest . 7)))))
   ;; s3 is over an hour ahead; d2 is deprecated; the repeated write is behind the mark
   (check-equal? counts '(1 1 3)))
+
+(spec-test '(DR.view TM.schedule CX.activation)
+           "define-fleet-health exports live, late, quiet, or silent per device and per sensor every minute"
+  (define exports
+    (run-in
+     (string-append
+      "(define-devices devices [\"d1\" watched] [\"d2\" watched])\n"
+      "(define-reflex #:arrivals arrivals #:devices devices #:contributions contributions #:triggers triggers)\n"
+      "(define-fleet-health by-device #:from contributions #:per device #:live 30 #:silent 120 #:stale 30)\n"
+      "(define-fleet-health by-sensor #:from contributions #:per sensor #:live 30 #:silent 120 #:stale 30)\n"
+      "(script #:final-watermark? #f\n"
+      " (at 10 arrivals (data-arrival 10 (sensor-write #:owner \"d1\" #:sensor \"s1\" #:type \"load\" #:n 2 #:first 5 #:last 10)))\n"
+      " (at 50 arrivals (data-arrival 50 (sensor-write #:owner \"d1\" #:sensor \"s2\" #:type \"position\" #:n 1 #:first 0)))\n"
+      " (advance-to 70))\n")
+     '(for/list ([o (run-result-outputs r)] #:when (memq (output-node o) '(by-device by-sensor)))
+        (list (output-at o) (output-node o) (event-attr (output-item o) 'key) (event-attr (output-item o) 'view)))))
+  (check-equal? (sort exports string<? #:key (λ (x) (format "~a" x)))
+                ;; at 60: d1 arrives (at 50) with data from 10, so late; d2 never sent: silent;
+                ;; s1 last arrived at 10: quiet; s2 arrived at 50 with data from 0: late
+                '((60 by-device "d1" late) (60 by-device "d2" silent)
+                  (60 by-sensor "s1" quiet) (60 by-sensor "s2" late))))
