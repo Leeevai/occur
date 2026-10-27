@@ -90,7 +90,8 @@
   (define (join-seq m1 m2)
     (define u (pmatch-union ctx m1 m2 #:pred (pred-of m1)))
     (and (selected? u) u))
-  (define (selected? m) ((selection-check selection) m (engine-pindex e0) (λ (leaf) (store (leaf-path leaf) 'qual))))
+  (define (selected? m)
+    ((selection-check selection) m (engine-index e0) (engine-pindex e0) (λ (leaf) (store (leaf-path leaf) 'qual))))
   (define (lift m) (struct-copy pmatch m [bindings (for/hasheq ([(k v) (in-hash (pmatch-bindings m))])
                                                       (values k (if (list? v) v (list v))))]))
   (define (go p path)
@@ -325,7 +326,10 @@
 
 (define current-selection-checks (make-hasheq))
 (define (selection-check s)
-  (hash-ref current-selection-checks s (λ () (λ (m pindex qual-of) #t))))
+  (hash-ref current-selection-checks s
+            (λ () (if (eq? s 'any)
+                      (λ (m index pindex qual-of) #t)
+                      (raise-arguments-error 'engine "unknown selection strategy" "strategy" s)))))
 (define (register-selection-check! name f) (hash-set! current-selection-checks name f))
 
 ;; ---------------------------------------------------------------------------
