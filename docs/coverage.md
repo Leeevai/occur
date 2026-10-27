@@ -166,15 +166,15 @@ Status values: `todo`, `partial`, `done`.
 | `SKIP.to-last` | §12 | `#:skip (to-last x)` | `skip-range` | tests/policies-test.rkt |  | partial |
 | `EVAL.immediate` | §12 | `#:eval immediate` (compile-time check: monotone only) | policy layer | tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
 | `EVAL.deferred` | §12 | `#:eval deferred`; forced by last/maximal | engine deferred nodes, policy releases | tests/nfa-test.rkt, tests/policies-test.rkt |  | partial |
-| `DR.summary` | §13 | | | | | todo |
-| `DR.view` | §13 | | | | | todo |
-| `DR.output-identity` | §13 | | | | | todo |
-| `DR.derive` | §13 | | | | | todo |
-| `DR.ordered` | §13 | | | | | todo |
-| `DR.closure` | §13 | | | | | todo |
-| `DR.cycle-guard` | §13 | (M13) | `make-program` cycle check (private/dataflow.rkt) | tests/dataflow-test.rkt |  | partial |
-| `DR.act` | §13 | | | | | todo |
-| `DR.retract` | §13 | | | | | todo |
+| `DR.summary` | §13 | `(summarize)` stage | `summarize` `summarized-output` `make-summary` (private/derive.rkt) | tests/derive-test.rkt, tests/lang-test.rkt |  | partial |
+| `DR.view` | §13 | `(define-view ...)`, `view-ref`, `classify-health` | `view-operator` `view-ref` `classify-health` (private/derive.rkt) | tests/derive-test.rkt, tests/lang-test.rkt |  | partial |
+| `DR.output-identity` | §13 | `(dedupe-outputs)` stage | `output-identity` `event-identity` `dedupe-outputs` (private/derive.rkt) | tests/derive-test.rkt, tests/lang-test.rkt |  | partial |
+| `DR.derive` | §13 | `#:emit (T [a e] ...)` in `define-pattern` | `derive-match` (private/pattern/operators.rkt) | tests/derive-test.rkt, tests/lang-test.rkt |  | partial |
+| `DR.ordered` | §13 | delivery grouped by key per instant (runner) | `flush-outbox!` (private/dataflow.rkt), `delivery-groups` (private/derive.rkt) | tests/derive-test.rkt, tests/lang-test.rkt |  | partial |
+| `DR.closure` | §13 | any stage or pattern reads derived streams | programs over nodes (private/dataflow.rkt) | tests/derive-test.rkt, tests/lang-test.rkt |  | partial |
+| `DR.cycle-guard` | §13 | `(feedback s)` stage, `#:recursive n` | `make-program` cycle check, recursive bound (private/dataflow.rkt) | tests/dataflow-test.rkt, tests/lang-test.rkt |  | partial |
+| `DR.act` | §13 | `(act name #:on s #:do e #:completion T)` | `action-operator` (private/derive.rkt) | tests/derive-test.rkt, tests/lang-test.rkt |  | partial |
+| `DR.retract` | §13 | retractions in source data propagate | provenance index in the runner (private/dataflow.rkt) | tests/derive-test.rkt, tests/dataflow-test.rkt, tests/lang-test.rkt |  | partial |
 | `RL.rejudge` | §14 | | | | | todo |
 | `RL.template` | §14 | | | | | todo |
 | `RL.binding` | §14 | | | | | todo |
