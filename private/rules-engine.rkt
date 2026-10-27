@@ -346,6 +346,7 @@
   (define op (rules-operator* key name))
   ;; every callback reads kinds and sub-streams through the keying
   (struct-copy operator op
+               [coalesce coalesce-rule-outputs]
                [on-event (λ (g s e c) (with-keying (λ () ((operator-on-event op) g s e c))))]
                [on-timer (λ (g s c) (with-keying (λ () ((operator-on-timer op) g s c))))]
                [init-key (λ (g k c) (with-keying (λ () ((operator-init-key op) g k c))))]
@@ -412,6 +413,7 @@
                                                (newest-of-key ks) (emitter c) (counter c))))))]
        [else (values g keys)]))
    #:instance-of (λ (e) (list (event-attr e 'rule) (event-attr e 'key) (event-attr e 'binding-key)))
+   #:coalesce coalesce-rule-outputs
    #:judge (λ (g keys e)
              (hash-has-key? (desired g (event-attr e 'key))
                             (list (event-attr e 'rule) (event-attr e 'key) (event-attr e 'binding-key))))))
@@ -431,3 +433,34 @@
 (provide
  (contract-out
   [rule-source-push (->* (any/c list?) (#:mode (or/c 'replace 'patch) #:at (or/c #f time?)) step:control?)]))
+
+;; OUT.coalesce for rule outputs held back during a replay: one output per
+;; instance with the latest reason and params, the hull of the windows, and
+;; samples and windows summed.
+(define (coalesce-rule-outputs es)
+  (define latest (last es))
+  (define (attr e k) (event-attr e k))
+  (define starts (filter real? (map (λ (e) (car (attr e 'window))) es)))
+  (define ws (if (= (length starts) (length es)) (apply min starts) (car (attr (car es) 'window))))
+  (define we (apply max (map (λ (e) (cadr (attr e 'window))) es)))
+  (define samples (apply + (map (λ (e) (attr e 'samples)) es)))
+  (define windows (apply + (map (λ (e) (attr e 'windows)) es)))
+  (define sources (remove-duplicates (append* (map (λ (e) (attr e 'sources)) es))))
+  (define reason (attr latest 'reason))
+  (define iv (interval (if (real? ws) (min ws we) we) we))
+  (event-update latest
+                #:payload (for/fold ([p (event-payload latest)])
+                                    ([kv (list (cons 'window (list ws we)) (cons 'samples samples) (cons 'windows windows)
+                                               (cons 'sources sources) (cons 'merged (length es))
+                                               (cons 'identity (output-identity #:instance (list (attr latest 'rule) (attr latest 'key)
+                                                                                                 (attr latest 'binding-key))
+                                                                                #:key (attr latest 'key) #:reason reason
+                                                                                #:interval iv #:samples samples))
+                                               (cons 'summary (make-summary #:interval iv #:samples samples #:merged windows
+                                                                            #:sources sources)))])
+                            (hash-set p (car kv) (cdr kv)))
+                #:ts (interval-start iv) #:te we))
+
+(provide
+ (contract-out
+  [coalesce-rule-outputs (-> (non-empty-listof event?) event?)]))

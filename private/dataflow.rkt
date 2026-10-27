@@ -164,7 +164,18 @@
 (struct step:control (time target msg config?) #:transparent)
 (struct step:suspend (from to) #:transparent)
 
+(struct step:checkpoint () #:transparent)
+(struct step:restore () #:transparent)
+(struct step:cold-start () #:transparent)
+
 (define (arrive t src e) (step:arrive t src e))
+;; TM.checkpoint: snapshot every operator's state, the read position, and
+;; the undelivered outputs. (restore) returns to the snapshot and re-reads
+;; the input retained since. TM.replay: (cold-start) rebuilds state by
+;; re-reading all retained input, holding outputs back (see run-step!).
+(define (checkpoint) (step:checkpoint))
+(define (restore) (step:restore))
+(define (cold-start) (step:cold-start))
 (define (advance-to t) (step:advance t))
 (define (watermark-to src t) (step:watermark src t))
 (define (control msg #:at [t #f] #:to [target 'all] #:config? [config? #f])
@@ -218,6 +229,13 @@
                 [outbox #:mutable]       ; reversed list of output awaiting delivery
                 [suspended? #:mutable]
                 [seqs #:mutable]         ; hasheq node -> number of events delivered so far
+                [log #:mutable]          ; reversed list of the retained input steps
+                [relogging? #:mutable]   ; re-reading retained input: do not log again
+                [snapshot #:mutable]     ; the last checkpoint, or #f
+                [holding? #:mutable]     ; replay: outputs are held back
+                [frozen? #:mutable]      ; replay: processing time does not move
+                [held #:mutable]         ; reversed list of held outputs
+                [awaiting-config? #:mutable]
                 delivery
                 track-provenance?))
 
@@ -228,7 +246,8 @@
 (define (make-runner prog start delivery track-provenance?)
   (runner prog start (initial-states prog) empty-deadlines
           (for/hasheq ([name (in-hash-keys (program-nodes prog))]) (values name empty-deadlines))
-          (hasheq) (hasheq) (hasheq) '() (hasheq) (box 0) '() '() #f (hasheq) delivery track-provenance?))
+          (hasheq) (hasheq) (hasheq) '() (hasheq) (box 0) '() '() #f (hasheq)
+          '() #f #f #f #f '() #f delivery track-provenance?))
 
 (define (W r name) (hash-ref (runner-wm r) name -inf.0))
 
@@ -389,7 +408,8 @@
 ;; after the limit's instant also fire (the script has ended, so processing
 ;; time is taken to move on past it).
 (define (fire-processing-deadlines! r limit #:drain? [drain? #f])
-  (unless (runner-suspended? r)
+  ;; suspended, or replaying (TM.replay: timers wait until the replay caught up)
+  (unless (or (runner-suspended? r) (runner-frozen? r))
     (let loop ()
       (define-values (token t pdl)
         (let-values ([(tok t d) (deadlines-pop-due (runner-pdl r) limit)])
@@ -438,6 +458,11 @@
 (define (flush-outbox! r)
   (define pending (reverse (runner-outbox r)))
   (set-runner-outbox! r '())
+  (cond
+    [(runner-holding? r) (set-runner-held! r (append (reverse pending) (runner-held r)))]
+    [else (deliver-outputs! r pending)]))
+
+(define (deliver-outputs! r pending)
   (define ordered
     (case (runner-delivery r)
       [(by-key)
@@ -448,7 +473,24 @@
       [else pending]))
   (set-runner-outputs! r (append (reverse ordered) (runner-outputs r))))
 
+(define (meta-step? s) (or (step:checkpoint? s) (step:restore? s) (step:cold-start? s)))
+
 (define (run-step! r s)
+  (cond
+    [(step:checkpoint? s) (take-snapshot! r)]
+    [(step:restore? s) (restore-snapshot! r)]
+    [(step:cold-start? s) (cold-start! r)]
+    [else
+     (unless (runner-relogging? r) (set-runner-log! r (cons s (runner-log r))))
+     (cond
+       [(runner-frozen? r) (replay-step! r s)]
+       [else (run-input-step! r s)])
+     ;; TM.replay: held outputs are released once the configuration has loaded
+     (when (and (runner-awaiting-config? r) (step:control? s) (step:control-config? s)
+                (not (runner-relogging? r)))
+       (release-held! r))]))
+
+(define (run-input-step! r s)
   (define prog (runner-program r))
   (define t (step-time s))
   (when (and t (not (step:suspend? s)))
@@ -497,6 +539,97 @@
     (when (or (zero? (operator-arity op)) (and (operator-eager? op) (not (operator-key op))))
       (key-callback! r name #f (λ (g s c) s))))
   (flush-outbox! r))
+
+;; ===========================================================================
+;; TM.checkpoint and TM.replay
+
+(struct snap (now states pdl edl wm maxte counters prov ids outbox seqs suspended? position) #:transparent)
+
+(define (take-snapshot! r)
+  (flush-outbox! r)
+  (set-runner-snapshot!
+   r (snap (runner-now r) (runner-states r) (runner-pdl r) (runner-edl r) (runner-wm r) (runner-maxte r)
+           (runner-counters r) (runner-prov r) (unbox (runner-ids r)) (runner-outbox r) (runner-seqs r)
+           (runner-suspended? r) (length (runner-log r)))))
+
+;; Restore the snapshot, then re-read the input retained since it.
+(define (restore-snapshot! r)
+  (define sn (runner-snapshot r))
+  (unless sn (raise-arguments-error 'run "restore needs an earlier checkpoint"))
+  (set-runner-now! r (snap-now sn)) (set-runner-states! r (snap-states sn)) (set-runner-pdl! r (snap-pdl sn))
+  (set-runner-edl! r (snap-edl sn)) (set-runner-wm! r (snap-wm sn)) (set-runner-maxte! r (snap-maxte sn))
+  (set-runner-counters! r (snap-counters sn)) (set-runner-prov! r (snap-prov sn))
+  (set-box! (runner-ids r) (snap-ids sn)) (set-runner-outbox! r (snap-outbox sn)) (set-runner-seqs! r (snap-seqs sn))
+  (set-runner-suspended?! r (snap-suspended? sn))
+  (define since (reverse (take (runner-log r) (- (length (runner-log r)) (snap-position sn)))))
+  (set-runner-relogging?! r #t)
+  (for ([s (in-list since)]) (run-step! r s))
+  (set-runner-relogging?! r #f))
+
+;; Rebuild state from all retained input with processing time frozen and
+;; outputs held; processing-time timers wait until the replay has caught up.
+(define (cold-start! r)
+  (flush-outbox! r)
+  (define prog (runner-program r))
+  (set-runner-states! r (initial-states prog)) (set-runner-pdl! r empty-deadlines)
+  (set-runner-edl! r (for/hasheq ([name (in-hash-keys (program-nodes prog))]) (values name empty-deadlines)))
+  (set-runner-wm! r (hasheq)) (set-runner-maxte! r (hasheq)) (set-runner-prov! r (hasheq)) (set-runner-seqs! r (hasheq))
+  (set-runner-outbox! r '()) (set-runner-suspended?! r #f)
+  (set-runner-holding?! r #t)
+  (set-runner-frozen?! r #t)
+  (start-generators! r)
+  (set-runner-relogging?! r #t)
+  (for ([s (in-list (reverse (runner-log r)))]) (run-step! r s))
+  (set-runner-relogging?! r #f)
+  ;; caught up: timers resume; outputs wait for the configuration, if any
+  (set-runner-frozen?! r #f)
+  (fire-processing-deadlines! r (runner-now r))
+  (flush-outbox! r)
+  (if (for/or ([n (in-hash-values (program-nodes prog))]) (operator-config? (node-op n)))
+      (set-runner-awaiting-config?! r #t)
+      (release-held! r)))
+
+;; A replayed step: data and configuration are re-read at the frozen
+;; processing time; clock steps are skipped.
+(define (replay-step! r s)
+  (match s
+    [(step:arrive _ src e) (run-input-step! r (step:arrive (runner-now r) src e))]
+    [(step:control _ target msg cfg) (run-input-step! r (step:control (runner-now r) target msg cfg))]
+    [(step:watermark _ _) (run-input-step! r s)]
+    [_ (void)]))
+
+;; Release held outputs: coalesced to one per operator instance, each
+;; judged against the instances in force; outputs of vanished instances are
+;; dropped and counted.
+(define (release-held! r)
+  (define prog (runner-program r))
+  (define held (reverse (runner-held r)))
+  (set-runner-held! r '())
+  (set-runner-holding?! r #f)
+  (set-runner-awaiting-config?! r #f)
+  (define events (filter (λ (o) (event? (output-item o))) held))
+  (define groups (group-by (λ (o) (cons (output-node o) (output-key o))) events))
+  (define released
+    (for*/list ([g (in-list groups)]
+                [o (in-value (car g))]
+                [op (in-value (node-op* r (output-node o)))]
+                [merged (in-value (if (null? (cdr g))
+                                      (output-item o)
+                                      ((or (operator-coalesce op) default-coalesce) (map output-item g))))]
+                #:when (or (not (operator-judge op))
+                           (let ([st (hash-ref (runner-states r) (output-node o))])
+                             (or ((operator-judge op) (car st) (cdr st) merged)
+                                 (begin (bump-counters! r (output-node o) (list (cons 'dropped-after-replay 1))) #f)))))
+      (output (runner-now r) (output-node o) (output-key o) merged)))
+  (deliver-outputs! r released))
+
+;; OUT.coalesce for held outputs without an operator-specific merge.
+(define (default-coalesce es)
+  (define latest (last es))
+  (event-update latest
+                #:payload (hash-set (event-payload latest) 'merged (length es))
+                #:ts (apply time-min (map event-ts es)) #:te (apply time-max (map event-te es))
+                #:n (apply + (map event-n es)) #:constituents es))
 
 (define (run prog steps
              #:clock [clock (simulated-clock 0)]
@@ -561,6 +694,12 @@
   [watermark-to (-> symbol? time? step:watermark?)]
   [control (->* (any/c) (#:at (or/c #f time?) #:to symbol? #:config? boolean?) step:control?)]
   [suspend (-> time? time? step:suspend?)]
+  [checkpoint (-> step:checkpoint?)]
+  [restore (-> step:restore?)]
+  [cold-start (-> step:cold-start?)]
+  [struct step:checkpoint ()]
+  [struct step:restore ()]
+  [struct step:cold-start ()]
   [struct step:arrive ([time time?] [source symbol?] [event (or/c event? retraction?)])]
   [struct step:advance ([time time?])]
   [struct step:watermark ([source symbol?] [time time?])]
