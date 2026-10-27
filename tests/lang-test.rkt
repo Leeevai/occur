@@ -288,3 +288,54 @@
   (define r (allen-run))
   (check-equal? (map (λ (e) (event-attr e 'code)) (by-node r 'in-shift)) '("c"))
   (check-equal? (map (λ (e) (event-attr e 'code)) (by-node r 'at-edges)) '("b" "d")))
+
+(require (only-in "lang/patterns.rkt" [occur-run patterns-run]))
+
+(spec-test '(PT.sequence PT.negation PT.kleene-plus PT.where PT.within DR.derive PT.conjunction PT.disjunction)
+           "define-pattern derives events from the matches of trace A"
+  (define r (patterns-run))
+  (check-equal? (sort (map (λ (e) (list (event-attr e 'n) (event-attr e 'total))) (by-node r 'card-testing))
+                      (λ (a b) (< (car a) (car b))))
+                '((1 600) (1 900) (2 1500)))
+  (define best (findf (λ (e) (= 2 (event-attr e 'n))) (by-node r 'card-testing)))
+  (check-equal? (list (event-type best) (event-attr best 'card) (event-ts best) (event-te best)) '(SuspectedFraud "c1" 60 240))
+  (check-equal? (map event-id (event-constituents best)) '("e1" "e2" "e4"))
+  (check-equal? (length (by-node r 'big-pair)) 2)          ; (e2, e4) bound either way
+  (check-equal? (length (by-node r 'small-or-verified)) 1))
+
+(define pat-header
+  (string-append "#lang occur\n(event-type Swipe [card : String] [amount : Real])\n(event-type Verified [card : String])\n"
+                 "(source feed #:types (Swipe Verified) #:key card)\n"))
+
+(spec-test 'PT.where "bindings used but never bound are compile-time errors"
+  (check-compile-error (string-append pat-header "(define-pattern p #:from feed (a : Swipe)\n #:where (> c.amount 1))\n")
+                       #rx"binding c is used but never bound" 6))
+
+(spec-test 'PT.kleene-plus "a Kleene binding used where a single event is expected is a compile-time error"
+  (check-compile-error (string-append pat-header "(define-pattern p #:from feed #:within 60 (kleene+ (b : Swipe))\n #:where (> b.amount 1))\n")
+                       #rx"b is a Kleene binding" 6)
+  (check-false (compile-error (string-append pat-header "(define-pattern p #:from feed #:within 60 (kleene+ (b : Swipe)) #:where (> (sum b.amount) 1))\n"))))
+
+(spec-test 'PT.primitive "unknown attributes of bindings and unknown types are compile-time errors"
+  (check-compile-error (string-append pat-header "(define-pattern p #:from feed (a : Swipe)\n #:where (> a.amont 1))\n")
+                       #rx"unknown attribute amont for binding a" 6)
+  (check-compile-error (string-append pat-header "(event-type Other [x : Real])\n(define-pattern p #:from feed\n (o : Other))\n")
+                       #rx"does not carry events of type Other" 7))
+
+(spec-test '(SEL.next CON.chronicle OUT.maximal) "unknown policy names are compile-time errors"
+  (check-compile-error (string-append pat-header "(define-pattern p #:from feed #:selection\n greedy (a : Swipe))\n")
+                       #rx"unknown selection policy" 6)
+  (check-compile-error (string-append pat-header "(define-pattern p #:from feed #:consumption\n lifo (a : Swipe))\n")
+                       #rx"unknown consumption policy" 6)
+  (check-compile-error (string-append pat-header "(define-pattern p #:from feed #:output\n all (a : Swipe))\n")
+                       #rx"unknown output policy" 6))
+
+(spec-test 'EVAL.immediate "immediate evaluation is valid only for monotone patterns"
+  (check-compile-error (string-append pat-header "(define-pattern p #:from feed #:within 60 #:eval\n immediate (seq (a : Swipe) (absent Verified #:within 10)))\n")
+                       #rx"valid only for monotone patterns" 6))
+
+(spec-test '(PT.kleene-plus PT.negation) "a pattern with negation or Kleene closure but no #:within draws a warning"
+  (check-regexp-match #rx"warning: pattern p has negation or Kleene closure but no #:within"
+                      (compile-warnings (string-append pat-header "(define-pattern p #:from feed (kleene+ (b : Swipe)))\n")))
+  (check-equal? (compile-warnings (string-append pat-header "(define-pattern p #:from feed #:within 60 (kleene+ (b : Swipe)))\n"))
+                ""))
