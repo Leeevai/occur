@@ -20,7 +20,7 @@ This file is the resume point for work on occur. Read it, together with
 | M11 | Incremental pattern engine, deadline scheduler, differential tests | §11, §17 | done |
 | M12 | Selection, consumption, output, skip, and evaluation policies | §12 | done |
 | M13 | Derivation | §13 | done |
-| M14 | Rules as data | §14 | todo |
+| M14 | Rules as data | §14 | done |
 | M15 | Checkpoint, restore, and replay | §6 | todo |
 | M16 | Acceptance: card testing | §15 | todo |
 | M17 | Acceptance: Reflex | §16 | todo |
@@ -29,14 +29,11 @@ This file is the resume point for work on occur. Read it, together with
 
 ## Next step
 
-M14: rules as data in `private/rules.rkt`: templates with conditions
-(accumulate with flush and rate limit, window close, silence with
-recovery, schedule) as instance operators, bindings with overrides and
-params, fan-out, instance identity, named sources replaced whole or
-patched, ownership, dangling and invalid items reported, semantic
-fingerprints, progress carry (continue/restart), re-judge on edit,
-convergence; the rules node keyed by entity; `rule-template`,
-`rule-source`, `bind`, and `define-condition` surface forms.
+M15: checkpoint and restore (TM.checkpoint) and cold-start replay with
+held-back, coalesced, re-judged output (TM.replay) in
+`private/checkpoint.rkt` and the runner, with the property that
+checkpoint, restore, then continue gives the uninterrupted run's outputs
+apart from repeats that downstream deduplication removes.
 
 Notes:
 - Hosted CI runs are blocked by the account's GitHub billing; every commit
