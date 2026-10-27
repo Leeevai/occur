@@ -259,3 +259,39 @@
   [session-window-operator (->* ((and/c real? positive?) accumulator?)
                                 (#:key (or/c #f (-> event? any/c)) #:lateness duration? #:type symbol?)
                                 operator?)]))
+
+;; ===========================================================================
+;; WN.count: the last n events, advancing every m events. A window is emitted
+;; every m-th event once n events have been seen, with ts and te the minimum
+;; and maximum over its contents. Invertible accumulators are maintained
+;; incrementally (AG.incremental); others are refolded.
+
+(struct count-state (queue size seen acc) #:transparent)   ; queue: newest first
+
+(define (count-window-operator n m acc #:key [key #f] #:type [type 'Window])
+  (define remove (accumulator-remove acc))
+  (make-operator
+   'count-window
+   #:key key
+   #:init-key (λ (gl k c) (count-state '() 0 0 ((accumulator-init acc))))
+   #:on-event
+   (λ (gl st e c)
+     (define q0 (cons e (count-state-queue st)))
+     (define evicted (if (> (length q0) n) (last q0) #f))
+     (define q (if evicted (take q0 n) q0))
+     (define seen (add1 (count-state-seen st)))
+     (define a (cond [(and remove evicted) (remove ((accumulator-add acc) (count-state-acc st) e) evicted)]
+                     [remove ((accumulator-add acc) (count-state-acc st) e)]
+                     [else #f]))
+     (when (and (= (length q) n) (zero? (modulo seen m)))
+       (define contents (reverse q))
+       (define st-acc (or a (for/fold ([s ((accumulator-init acc))]) ([x contents]) ((accumulator-add acc) s x))))
+       (emit! c (window-output type (ctx-key c) (apply time-min (map event-ts contents))
+                               (apply time-max (map event-te contents)) acc st-acc contents)))
+     (count-state q (length q) seen (or a (count-state-acc st))))))
+
+(provide
+ (contract-out
+  [count-window-operator (->* (exact-positive-integer? exact-positive-integer? accumulator?)
+                              (#:key (or/c #f (-> event? any/c)) #:type symbol?)
+                              operator?)]))

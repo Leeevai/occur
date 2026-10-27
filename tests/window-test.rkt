@@ -128,3 +128,11 @@
                         #:final? #f))
   (check-equal? (wins r) '((0 15 2)))
   (check-equal? (map output-at (run-result-outputs r)) '(2)))
+
+(spec-test '(WN.count AG.incremental) "count windows hold the last n events and advance every m"
+  (define r (run-window (count-window-operator 3 2 contents-accumulator)
+                        (for/list ([i 7]) (arrive i 'in (pt (format "e~a" i) (* 10 i) #:n (add1 i))))))
+  ;; windows end at the 4th and 6th events (the 2nd is not yet full)
+  (check-equal? (map (λ (e) (list (event-ts e) (event-te e) (event-attr e 'count) (event-attr e 'events)))
+                     (run-result-events r))
+                '((10 30 9 3) (30 50 15 3))))
