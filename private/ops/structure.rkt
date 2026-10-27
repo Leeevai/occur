@@ -101,3 +101,52 @@
   [struct hwm-state ([hw time?] [late exact-nonnegative-integer?]
                      [contributions exact-nonnegative-integer?])]
   [monotonic-merge-operator (-> (-> event? any/c) operator?)]))
+
+;; ---------------------------------------------------------------------------
+;; ST.reorder: buffer events and release them in event-time order up to the
+;; watermark. Order is (te, ts, arrival), so a release at watermark W never
+;; precedes a later arrival (which has te >= W). An event arriving behind the
+;; watermark (te < W) is late: dropped and counted, or emitted at once.
+
+(struct reorder-state (buffer seq) #:transparent)   ; buffer: sorted list of (key . event)
+
+(define (reorder-key e seq) (vector (event-te e) (event-ts e) seq))
+(define (rkey<? a b)
+  (or (< (vector-ref a 0) (vector-ref b 0))
+      (and (= (vector-ref a 0) (vector-ref b 0))
+           (or (< (vector-ref a 1) (vector-ref b 1))
+               (and (= (vector-ref a 1) (vector-ref b 1)) (< (vector-ref a 2) (vector-ref b 2)))))))
+
+(define (insert-sorted x lst)
+  (cond [(null? lst) (list x)]
+        [(rkey<? (car x) (car (car lst))) (cons x lst)]
+        [else (cons (car lst) (insert-sorted x (cdr lst)))]))
+
+(define (reorder-operator #:key [key #f] #:late [late 'drop])
+  (make-operator
+   'reorder
+   #:monotone? #t
+   #:key key
+   #:init-key (λ (g k c) (reorder-state '() 0))
+   #:on-event
+   (λ (g s e c)
+     (cond
+       [(< (event-te e) (ctx-watermark c))
+        (if (eq? late 'emit) (emit! c e) (count! c 'late))
+        s]
+       [else (reorder-state (insert-sorted (cons (reorder-key e (reorder-state-seq s)) e)
+                                           (reorder-state-buffer s))
+                            (add1 (reorder-state-seq s)))]))
+   #:event-deadline (λ (s) (and (pair? (reorder-state-buffer s))
+                                (vector-ref (car (car (reorder-state-buffer s))) 0)))
+   #:on-timer
+   (λ (g s c)
+     (let loop ([buf (reorder-state-buffer s)])
+       (cond [(and (pair? buf) (<= (vector-ref (car (car buf)) 0) (ctx-watermark c)))
+              (emit! c (cdr (car buf)))
+              (loop (cdr buf))]
+             [else (reorder-state buf (reorder-state-seq s))])))))
+
+(provide
+ (contract-out
+  [reorder-operator (->* () (#:key (or/c #f (-> event? any/c)) #:late (or/c 'drop 'emit)) operator?)]))

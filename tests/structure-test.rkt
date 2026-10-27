@@ -104,3 +104,24 @@
      (for ([a out] [b (if (null? out) '() (cdr out))])
        (check-true (<= (cadr a) (car b))))
      (check-true (<= (apply + 0 (map caddr out)) (apply + 0 (map event-n xs)))))))
+
+(spec-test 'ST.reorder "reorder releases buffered events in event-time order at the watermark"
+  (define src (make-source 'in))
+  (define n (make-node 'r (reorder-operator) (list src) #:sink? #t))
+  (define r (run (make-program (list n))
+                 (list (arrive 1 'in (ev "c" 30)) (arrive 2 'in (ev "a" 10)) (arrive 3 'in (ev "b" 20))
+                       (watermark-to 'in 25)
+                       (arrive 4 'in (ev "late" 5)) (arrive 5 'in (ev "d" 26)))))
+  (check-equal? (ids (run-result-events r)) '("a" "b" "d" "c"))
+  (check-equal? (map output-at (run-result-outputs r)) '(3 3 5 5))
+  (check-equal? (run-result-counter r 'r 'late) 1))
+
+(spec-test 'ST.reorder "property: the released order is sorted by end time and nothing on time is lost"
+  (check-property
+   (make-config #:tests (trials))
+   (property ([ts (gen:list (gen:integer-in 0 40) #:max-length 15)])
+     (define es (for/list ([t ts] [i (in-naturals)]) (ev (format "e~a" i) t)))
+     (define out (run-result-events (run-operator (reorder-operator) (list es) #:watermark 'none
+                                                  #:arrivals (list (for/list ([i (length es)]) i)))))
+     (check-equal? (map event-te out) (sort (map event-te es) <))
+     (check-equal? (length out) (length es)))))
