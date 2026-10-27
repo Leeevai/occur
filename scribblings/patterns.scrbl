@@ -100,7 +100,9 @@ Selection strategies are conditions on every event that follows a step, so
 they apply to steps inside any composite pattern; on one key the match sets
 nest strict ⊆ partition ⊆ next ⊆ any. Consumption decides which candidates
 one terminator completes; output filters what is reported; last and maximal
-output defer evaluation until the watermark passes the match's scope.
+output defer evaluation until no further extension is possible: until the
+watermark passes ts + Δ under @racket[#:within] Δ, and until the end of the
+stream without a bound, which draws a compile-time warning.
 
 @section{The incremental engine}
 
@@ -113,7 +115,9 @@ guarantees the answer (@tt{EVAL.deferred}). A hybrid-clock absence decides
 on the processing clock, which is how a total silence is seen
 (@tt{TM.idle}). Property tests check the engine against the oracle on
 random patterns and histories. @racket[#:engine reference] runs the oracle
-instead.
+instead, once the stream is complete: it applies every selection strategy
+with every or maximal output, under unrestricted consumption and no
+skipping.
 
 @section{Runtime}
 
