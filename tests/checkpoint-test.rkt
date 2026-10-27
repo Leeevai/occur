@@ -137,3 +137,23 @@
                                                       (event-attr/default (output-item o) 'merged #f)))
       (list (event-attr (output-item o) 'rule) (event-attr (output-item o) 'merged) (event-attr (output-item o) 'samples))))
   (check-equal? (sort released string<? #:key car) '(("a" 2 2) ("b" 2 2))))
+
+(spec-test '(TM.replay OUT.coalesce) "with stages after the rules node, held triggers are still coalesced per instance and judged"
+  ;; rules → re-key by device (a stage after the rules, as a trigger stream has)
+  (define (program)
+    (define src (make-source 'in #:watermark 'ascending))
+    (define rules (make-node 'rules (rules-operator #:key (λ (e) (event-attr e 'dev))) (list src)))
+    (define out (make-node 'out (key-by-operator (λ (e) (event-attr e 'key))) (list rules) #:sink? #t))
+    (make-program (list out)))
+  (define both (list (make-rule "a" #:condition (condition 'accumulate (hasheq 'count 1 'span 0)))
+                     (make-rule "b" #:condition (condition 'accumulate (hasheq 'count 1 'span 0)))))
+  (define steps (list (push-rules both)
+                      (arrive 10 'in (contrib "d1" 10 10 1)) (arrive 20 'in (contrib "d1" 20 20 1))
+                      (cold-start)
+                      (push-rules (list (car both)))))        ; b is gone after the restart
+  (define r (run (program) steps #:final-watermark? #f))
+  (define released (filter (λ (o) (and (= (output-at o) 20) (event-attr/default (output-item o) 'merged #f)))
+                           (run-result-outputs r)))
+  (check-equal? (for/list ([o released]) (list (event-attr (output-item o) 'rule) (event-attr (output-item o) 'samples)))
+                '(("a" 2)))
+  (check-equal? (run-result-counter r 'rules 'dropped-after-replay) 1))

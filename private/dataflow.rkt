@@ -235,6 +235,7 @@
                 [holding? #:mutable]     ; replay: outputs are held back
                 [frozen? #:mutable]      ; replay: processing time does not move
                 [held #:mutable]         ; reversed list of held outputs
+                [held-emissions #:mutable] ; reversed list of #(node key port item) held at their node
                 [awaiting-config? #:mutable]
                 delivery
                 track-provenance?))
@@ -247,7 +248,7 @@
   (runner prog start (initial-states prog) empty-deadlines
           (for/hasheq ([name (in-hash-keys (program-nodes prog))]) (values name empty-deadlines))
           (hasheq) (hasheq) (hasheq) '() (hasheq) (box 0) '() '() #f (hasheq)
-          '() #f #f #f #f '() #f delivery track-provenance?))
+          '() #f #f #f #f '() '() #f delivery track-provenance?))
 
 (define (W r name) (hash-ref (runner-wm r) name -inf.0))
 
@@ -335,10 +336,19 @@
                     (hash)))))
 
 ;; Deliver the emissions of node `name` (made under partition `key`).
+;; During a replay, the events of a node that judges or coalesces its own
+;; outputs (the rules node) are held at the node, so that they are released
+;; per operator instance and judged before any later stage sees them.
+(define (holds-emissions? op) (and (or (operator-judge op) (operator-coalesce op)) #t))
+
 (define (propagate! r name key emissions)
   (define prog (runner-program r))
   (define op (node-op* r name))
-  (for ([pe (in-list emissions)])
+  (for ([pe (in-list emissions)]
+        #:unless (and (runner-holding? r) (event? (cdr pe)) (holds-emissions? op)
+                      (begin (set-runner-held-emissions! r (cons (vector name key (car pe) (cdr pe))
+                                                                 (runner-held-emissions r)))
+                             #t)))
     (define port (car pe))
     (define item (cdr pe))
     (when (event? item) (record-provenance! r name item))
@@ -598,30 +608,41 @@
     [(step:watermark _ _) (run-input-step! r s)]
     [_ (void)]))
 
-;; Release held outputs: coalesced to one per operator instance, each
-;; judged against the instances in force; outputs of vanished instances are
-;; dropped and counted.
+;; Release what the replay held: coalesced to one per operator instance,
+;; each judged against the instances in force (an output of a vanished
+;; instance is dropped and counted). Sink outputs are delivered; the
+;; emissions held at their node then continue downstream.
 (define (release-held! r)
-  (define prog (runner-program r))
   (define held (reverse (runner-held r)))
+  (define emissions (reverse (runner-held-emissions r)))
   (set-runner-held! r '())
+  (set-runner-held-emissions! r '())
   (set-runner-holding?! r #f)
   (set-runner-awaiting-config?! r #f)
+  (define (merge+judge name items)
+    (define op (node-op* r name))
+    (define merged (if (null? (cdr items)) (car items) ((or (operator-coalesce op) default-coalesce) items)))
+    (define st (hash-ref (runner-states r) name))
+    (cond
+      [(or (not (operator-judge op)) ((operator-judge op) (car st) (cdr st) merged)) merged]
+      [else (bump-counters! r name (list (cons 'dropped-after-replay 1))) #f]))
+  ;; sink outputs of the other nodes, one per (node, key)
   (define events (filter (λ (o) (event? (output-item o))) held))
-  (define groups (group-by (λ (o) (cons (output-node o) (output-key o))) events))
-  (define released
-    (for*/list ([g (in-list groups)]
-                [o (in-value (car g))]
-                [op (in-value (node-op* r (output-node o)))]
-                [merged (in-value (if (null? (cdr g))
-                                      (output-item o)
-                                      ((or (operator-coalesce op) default-coalesce) (map output-item g))))]
-                #:when (or (not (operator-judge op))
-                           (let ([st (hash-ref (runner-states r) (output-node o))])
-                             (or ((operator-judge op) (car st) (cdr st) merged)
-                                 (begin (bump-counters! r (output-node o) (list (cons 'dropped-after-replay 1))) #f)))))
-      (output (runner-now r) (output-node o) (output-key o) merged)))
-  (deliver-outputs! r released))
+  (deliver-outputs!
+   r (for*/list ([g (in-list (group-by (λ (o) (cons (output-node o) (output-key o))) events))]
+                 [merged (in-value (merge+judge (output-node (car g)) (map output-item g)))]
+                 #:when merged)
+       (output (runner-now r) (output-node (car g)) (output-key (car g)) merged)))
+  ;; emissions held at their node, one per (node, instance, port)
+  (define (instance-of v)
+    (define op (node-op* r (vector-ref v 0)))
+    (if (operator-instance-of op) ((operator-instance-of op) (vector-ref v 3)) (vector-ref v 1)))
+  (for* ([g (in-list (group-by (λ (v) (list (vector-ref v 0) (instance-of v) (vector-ref v 2))) emissions))]
+         [v (in-value (car g))]
+         [merged (in-value (merge+judge (vector-ref v 0) (map (λ (x) (vector-ref x 3)) g)))]
+         #:when merged)
+    (propagate! r (vector-ref v 0) (vector-ref v 1) (list (cons (vector-ref v 2) merged))))
+  (flush-outbox! r))
 
 ;; OUT.coalesce for held outputs without an operator-specific merge.
 (define (default-coalesce es)
