@@ -67,9 +67,10 @@
   (define ids (map event-id (pmatch-events m1)))
   (not (for/or ([e (in-list (pmatch-events m2))]) (member (event-id e) ids))))
 
-;; A canonical key: two derivations of the same match are one match.
+;; A canonical key: two derivations of the same match are one match. Event
+;; ids are sorted by name, so the key does not depend on arrival order.
 (define (pmatch-key m)
-  (list (pmatch-ids m)
+  (list (sort (pmatch-ids m) (λ (a b) (string<? (format "~a" a) (format "~a" b))))
         (sort (for/list ([(k v) (in-hash (pmatch-bindings m))])
                 (cons k (cond [(event? v) (event-id v)]
                               [(list? v) (map (λ (x) (if (event? x) (event-id x) x)) v)]
@@ -135,6 +136,7 @@
   [pmatch-ids (-> pmatch? (listof any/c))]
   [pmatch-key (-> pmatch? list?)]
   [pmatch-end (-> oracle-ctx? pmatch? pair?)]
+  [pmatch-union (->* (oracle-ctx? pmatch? pmatch?) (#:pred (or/c #f pair?)) pmatch?)]
   [index-of-event (-> oracle-ctx? event? exact-nonnegative-integer?)]
   [denote (->* (pat? (listof event?)) (#:activation (or/c #f time?) #:horizon (or/c #f time?))
                (listof pmatch?))]))
