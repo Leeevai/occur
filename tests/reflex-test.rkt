@@ -99,3 +99,18 @@
   (check-equal? (triggers-for r "continue-job") '((1000 samples (500 510) 2 1 #hasheq())))
   ;; restart: nothing at the edit; two new contributions later, the first output
   (check-equal? (triggers-for r "restart-job") '((1110 samples (1100 1110) 2 1 #hasheq()))))
+
+(require (prefix-in health: "../examples/reflex/health.rkt"))
+
+(spec-test '(DR.view TM.schedule CX.activation)
+           "fleet health per device and per sensor, exported every minute: live, late, quiet, silent"
+  (define r (health:occur-run))
+  (define (states node key)
+    (for/list ([o (run-result-outputs r)]
+               #:when (and (eq? (output-node o) node) (equal? (event-attr (output-item o) 'key) key)))
+      (cons (output-at o) (event-attr (output-item o) 'view))))
+  (check-equal? (states 'device-health "d1") '((60 . live) (120 . late) (180 . late) (240 . quiet) (300 . quiet) (360 . quiet)))
+  (check-equal? (map cdr (states 'device-health "d2")) '(silent silent silent silent silent silent))
+  (check-equal? (states 'sensor-health "d1-load") '((60 . live) (120 . late) (180 . quiet) (240 . quiet) (300 . quiet) (360 . silent)))
+  ;; a sensor is known once it reports
+  (check-equal? (map car (states 'sensor-health "d1-position")) '(120 180 240 300 360)))
