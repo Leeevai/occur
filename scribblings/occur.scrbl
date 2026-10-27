@@ -41,3 +41,4 @@ time.
 @include-section["rules.scrbl"]
 @include-section["reflex.scrbl"]
 @include-section["examples.scrbl"]
+@include-section["reference.scrbl"]

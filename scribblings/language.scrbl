@@ -54,7 +54,7 @@ source or another stream, optionally only some of its types.}
 
 @defform[(script option ... step ...)
          #:grammar ([option (code:line #:start t) (code:line #:final-watermark? bool)]
-                    [step (at t source event) (advance-to t) (watermark source t)
+                    [step (at t source event-expr) (advance-to t) (watermark source t)
                           (suspend t1 t2) expr])]{Replaces the sources' data
 with an explicit script for the simulated processing clock. With
 @racket[#:start], the clock starts at @racket[t] and the declarations'
