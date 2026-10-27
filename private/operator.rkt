@@ -17,7 +17,8 @@
 ;;
 ;; An operator of arity 0 is a generator: it has no inputs, and the runner
 ;; creates its (unkeyed) state when the run starts, so its deadlines arm
-;; from the start (calendar schedules are generators).
+;; from the start (calendar schedules are generators). An unkeyed operator
+;; declared eager? is started the same way although it has inputs.
 ;;
 ;; The runner partitions every operator by its key function, so each key's
 ;; state is isolated (ES.keyed) and operators are written for one partition.
@@ -36,7 +37,7 @@
 (struct operator (name arity outputs monotone? key lifecycle? config?
                   init-global init-key on-event on-timer deadline event-deadline
                   on-watermark on-control on-signal on-retract
-                  judge coalesce instance-of)
+                  judge coalesce instance-of eager?)
   #:transparent)
 
 (define (pass-through g s e ctx) (emit! ctx e) s)
@@ -60,10 +61,11 @@
                        #:on-retract [on-retract #f]
                        #:judge [judge #f]
                        #:coalesce [coalesce #f]
-                       #:instance-of [instance-of #f])
+                       #:instance-of [instance-of #f]
+                       #:eager? [eager? #f])
   (operator name arity outputs monotone? key lifecycle? config?
             init-global init-key on-event on-timer deadline event-deadline
-            on-watermark on-control on-signal on-retract judge coalesce instance-of))
+            on-watermark on-control on-signal on-retract judge coalesce instance-of eager?))
 
 ;; A stateless operator: proc receives the event and the context and emits.
 (define (stateless-operator name proc #:monotone? [monotone? #t] #:outputs [outputs 1]
@@ -106,7 +108,7 @@
                     [on-watermark (or/c #f procedure?)] [on-control (or/c #f procedure?)]
                     [on-signal (or/c #f procedure?)] [on-retract (or/c #f procedure?)]
                     [judge (or/c #f procedure?)] [coalesce (or/c #f procedure?)]
-                    [instance-of (or/c #f procedure?)])]
+                    [instance-of (or/c #f procedure?)] [eager? boolean?])]
   [make-operator (->* (symbol?)
                       (#:arity exact-nonnegative-integer? #:outputs exact-positive-integer?
                        #:monotone? boolean? #:key (or/c #f (-> event? any/c))
@@ -123,7 +125,8 @@
                        #:on-retract (or/c #f (-> any/c any/c event? ctx? any/c))
                        #:judge (or/c #f (-> any/c hash? event? any/c))
                        #:coalesce (or/c #f (-> (non-empty-listof event?) event?))
-                       #:instance-of (or/c #f (-> event? any/c)))
+                       #:instance-of (or/c #f (-> event? any/c))
+                       #:eager? boolean?)
                       operator?)]
   [stateless-operator (->* (symbol? (-> event? ctx? any))
                            (#:monotone? boolean? #:outputs exact-positive-integer?

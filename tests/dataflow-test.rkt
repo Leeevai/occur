@@ -213,3 +213,11 @@
                                #:on-timer (λ (g s c) s)))
   (define n (make-node 'stuck stuck (list src) #:sink? #t))
   (check-equal? (run-result-outputs (run (make-program (list n)) (list (arrive 1 'in (ev "a" 1))))) '()))
+
+(test-case "an eager unkeyed operator starts with the run although it has inputs"
+  (define eager (make-operator 'eager #:eager? #t
+                               #:init-key (λ (g k c) (+ (ctx-now c) 10))
+                               #:deadline (λ (s) s)
+                               #:on-timer (λ (g s c) (emit! c (make-event 'Tick '() #:at (ctx-now c))) #f)))
+  (define n (make-node 'eager eager (list src) #:sink? #t))
+  (check-equal? (ats (run (make-program (list n)) (list (advance-to 50)))) '(10)))

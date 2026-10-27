@@ -479,7 +479,8 @@
 ;; state is created at the start time and their deadlines armed.
 (define (start-generators! r)
   (for ([name (in-list (program-order (runner-program r)))])
-    (when (zero? (operator-arity (node-op* r name)))
+    (define op (node-op* r name))
+    (when (or (zero? (operator-arity op)) (and (operator-eager? op) (not (operator-key op))))
       (key-callback! r name #f (λ (g s c) s))))
   (flush-outbox! r))
 
