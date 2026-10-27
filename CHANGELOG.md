@@ -29,3 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `split`, and `route` as runtime operators and `define-stream` stages, with
   attributes bound as variables in stage expressions and compile-time checks
   against the stream's shape.
+- Stream structure (M4): `merge`, `key-by`, `dedupe`, high-water-mark
+  `monotonic-merge` (trace R2), `reorder`, and `throttle`, with source keying
+  options (`#:key`, `#:substream`, `#:kind`, `#:merge high-water-mark`) and a
+  property test that partitioned runs emit what one run emits.
