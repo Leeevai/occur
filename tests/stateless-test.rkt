@@ -2,6 +2,7 @@
 (require rackunit
          "util.rkt"
          "../private/event.rkt"
+         "../private/operator.rkt"
          "../private/dataflow.rkt"
          "../private/ops/stateless.rkt")
 
@@ -91,3 +92,27 @@
   (check-equal? (map (λ (e) (list (event-ts e) (event-te e))) out) '((0 2) (1 9)))
   (check-true (andmap (λ (e) (equal? (map event-id (event-constituents e)) '("w"))) out))
   (check-false (equal? (event-id (car out)) (event-id (cadr out)))))
+
+(define (alert id level) (make-event 'Alert `((level . ,level)) #:id id #:at 1))
+
+(define (route-ports op events ports)
+  (define src (make-source 'in))
+  (define r (make-node 'route op (list src)))
+  (define sinks (for/list ([p ports]) (make-node (string->symbol (format "p~a" p)) (make-operator 'id)
+                                                 (list (cons r p)) #:sink? #t)))
+  (define res (run (make-program sinks) (for/list ([e events]) (arrive 1 'in e))))
+  (for/list ([p ports]) (map event-id (run-result-events res (string->symbol (format "p~a" p))))))
+
+(spec-test 'OP.route "exclusive routing sends each event to the first matching stream"
+  (define preds (list (λ (e) (>= (event-attr e 'level) 3)) (λ (e) (>= (event-attr e 'level) 1))))
+  (check-equal? (route-ports (route-operator preds #:otherwise? #t)
+                             (list (alert "a" 4) (alert "b" 2) (alert "c" 0))
+                             '(0 1 2))
+                '(("a") ("b") ("c"))))
+
+(spec-test 'OP.route "inclusive routing sends each event to every matching stream"
+  (define preds (list (λ (e) (>= (event-attr e 'level) 3)) (λ (e) (>= (event-attr e 'level) 1))))
+  (check-equal? (route-ports (route-operator preds #:mode 'inclusive)
+                             (list (alert "a" 4) (alert "b" 2) (alert "c" 0))
+                             '(0 1))
+                '(("a") ("a" "b"))))

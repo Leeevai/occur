@@ -127,3 +127,30 @@
 (provide
  (contract-out
   [split-operator (-> (-> event? (listof event?)) operator?)]))
+
+;; ---------------------------------------------------------------------------
+;; OP.route: predicates p₁ … pₙ produce streams Sᵢ = σ_{pᵢ}(S) on output
+;; ports 0 … n−1. In exclusive mode the first matching predicate wins; in
+;; inclusive mode every matching predicate's stream gets the event. With
+;; #:otherwise, unmatched events go to an extra port n.
+
+(define (route-operator preds #:mode [mode 'exclusive] #:otherwise? [otherwise? #f])
+  (define n (length preds))
+  (make-operator
+   'route
+   #:outputs (+ n (if otherwise? 1 0))
+   #:on-event
+   (λ (g s e c)
+     (define hit?
+       (for/fold ([hit? #f]) ([p (in-list preds)] [i (in-naturals)]
+                              #:break (and hit? (eq? mode 'exclusive)))
+         (cond [(p e) (emit! c e i) #t]
+               [else hit?])))
+     (when (and otherwise? (not hit?)) (emit! c e n))
+     s)))
+
+(provide
+ (contract-out
+  [route-operator (->* ((listof (-> event? any/c)))
+                       (#:mode (or/c 'exclusive 'inclusive) #:otherwise? boolean?)
+                       operator?)]))
