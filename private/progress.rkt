@@ -117,3 +117,68 @@
  (contract-out
   [skew-guard-operator (-> duration? operator?)]
   [lateness-operator (-> lateness-policy/c operator?)]))
+
+;; ===========================================================================
+;; TM.timer: callbacks at an event time t, which fire when W >= t, or at a
+;; processing time t. The delay operator holds each event for d and releases
+;; it from such a timer.
+
+(define (insert-by-due due x lst)
+  (cond [(null? lst) (list (cons due x))]
+        [(< due (car (car lst))) (cons (cons due x) lst)]
+        [else (cons (car lst) (insert-by-due due x (cdr lst)))]))
+
+(define (delay-operator d #:clock [clock 'event-time] #:key [key #f])
+  (define event-clock? (eq? clock 'event-time))
+  (make-operator
+   'delay
+   #:key key
+   #:init-key (λ (g k c) '())
+   #:on-event (λ (g pending e c)
+                (insert-by-due (+ (if event-clock? (event-te e) (ctx-now c)) d) e pending))
+   #:deadline (λ (pending) (and (not event-clock?) (pair? pending) (car (car pending))))
+   #:event-deadline (λ (pending) (and event-clock? (pair? pending) (car (car pending))))
+   #:on-timer
+   (λ (g pending c)
+     (define limit (if event-clock? (ctx-watermark c) (ctx-now c)))
+     (let loop ([p pending])
+       (cond [(and (pair? p) (<= (car (car p)) limit)) (emit! c (cdr (car p))) (loop (cdr p))]
+             [(null? p) #f]
+             [else p])))))
+
+;; ===========================================================================
+;; TM.idle: event time advances only when data arrives, so noticing that
+;; nothing arrives needs a processing-time or hybrid timer. The idle operator
+;; emits one Idle event per key once nothing has arrived for d: measured from
+;; the last arrival (processing clock) or from the newest event time compared
+;; with the clock (hybrid). New data re-arms it.
+
+(struct idle-state (anchor notified?) #:transparent)
+
+(define (idle-operator d #:clock [clock 'processing-time] #:key [key #f])
+  (make-operator
+   'idle
+   #:monotone? #f
+   #:key key
+   #:init-key (λ (g k c) (idle-state #f #f))
+   #:on-event (λ (g s e c)
+                (define anchor (if (eq? clock 'hybrid) (event-te e) (ctx-now c)))
+                (idle-state (if (idle-state-anchor s) (time-max anchor (idle-state-anchor s)) anchor) #f))
+   #:deadline (λ (s) (and (idle-state-anchor s) (not (idle-state-notified? s)) (+ (idle-state-anchor s) d)))
+   #:on-timer
+   (λ (g s c)
+     (cond
+       [(and (not (idle-state-notified? s)) (>= (ctx-now c) (+ (idle-state-anchor s) d)))
+        (emit! c (make-event 'Idle `((key . ,(ctx-key c)) (since . ,(idle-state-anchor s)) (after . ,d))
+                             #:ts (idle-state-anchor s) #:te (ctx-now c) #:src 'idle))
+        (idle-state (idle-state-anchor s) #t)]
+       [else s]))))
+
+(provide
+ (contract-out
+  [delay-operator (->* (duration?) (#:clock (or/c 'event-time 'processing-time)
+                                    #:key (or/c #f (-> event? any/c)))
+                       operator?)]
+  [idle-operator (->* (duration?) (#:clock (or/c 'processing-time 'hybrid)
+                                   #:key (or/c #f (-> event? any/c)))
+                      operator?)]))

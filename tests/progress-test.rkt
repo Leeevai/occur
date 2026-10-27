@@ -79,3 +79,35 @@
   (check-equal? (map event-id (run-result-events allowed 'on-time)) '("a" "b" "d"))
   (check-equal? (run-result-counter allowed 'late 'late-accepted) 1)
   (check-equal? (run-result-counter allowed 'late 'late) 1))
+
+(spec-test '(TM.timer TM.event-time) "an event-time timer fires when the watermark reaches it"
+  (define src (make-source 'in))
+  (define n (make-node 'd (delay-operator 10) (list src) #:sink? #t))
+  (define r (run (make-program (list n))
+                 (list (arrive 1 'in (pt "a" 5)) (arrive 2 'in (pt "b" 7))
+                       (watermark-to 'in 16) (arrive 3 'in (pt "c" 20)) (watermark-to 'in 40))
+                 #:final-watermark? #f))
+  (check-equal? (map event-id (run-result-events r)) '("a" "b" "c"))
+  (check-equal? (map output-at (run-result-outputs r)) '(2 3 3)))
+
+(spec-test '(TM.timer TM.processing-time) "a processing-time timer fires when the clock reaches it"
+  (define src (make-source 'in))
+  (define n (make-node 'd (delay-operator 10 #:clock 'processing-time) (list src) #:sink? #t))
+  (define r (run (make-program (list n))
+                 (list (arrive 1 'in (pt "a" 500)) (arrive 4 'in (pt "b" 0)) (advance-to 30))))
+  (check-equal? (map event-id (run-result-events r)) '("a" "b"))
+  (check-equal? (map output-at (run-result-outputs r)) '(11 14)))
+
+(spec-test 'TM.idle "noticing silence needs a processing-time or hybrid timer"
+  (define (idle-run clock)
+    (define src (make-source 'in))
+    (define n (make-node 'idle (idle-operator 60 #:clock clock #:key (λ (e) 'k)) (list src) #:sink? #t))
+    (run (make-program (list n))
+         (list (arrive 0 'in (pt "a" 0)) (arrive 30 'in (pt "b" 10)) (advance-to 200)
+               (arrive 300 'in (pt "c" 300)) (advance-to 500))))
+  (define p (idle-run 'processing-time))
+  (check-equal? (map output-at (run-result-outputs p)) '(90 360))
+  (define h (idle-run 'hybrid))
+  ;; hybrid: the newest event time (10) plus 60, compared with the clock
+  (check-equal? (map output-at (run-result-outputs h)) '(70 360))
+  (check-equal? (map (λ (e) (event-attr e 'since)) (run-result-events h)) '(10 300)))
