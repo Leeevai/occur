@@ -11,7 +11,11 @@
                        "../private/event.rkt"
                        "../private/io.rkt"))
 
-(provide (struct-out type-static)
+(provide make-source-static
+         make-stream-static
+         clock-name?
+         check-clock!
+         (struct-out type-static)
          (struct-out source-static)
          (struct-out stream-static)
          (struct-out shape)
@@ -104,13 +108,19 @@
 ;; Sources and streams
 
 ;; types: list of type-static
-(struct source-static (name types runtime-id)
+;; keying: #f or a hasheq with optional 'entity 'substream 'kind attribute names
+;; head: #f, or the identifier of the node streams read instead of the source
+;;       (for example its high-water-mark merge)
+(struct source-static (name types runtime-id [keying #:auto] [head #:auto])
+  #:auto-value #f #:mutable
   #:property prop:procedure
   (identifier-macro (λ (self) (source-static-runtime-id self))
                     (λ (self stx) (raise-syntax-error #f "a source is not a procedure" stx))))
 
-;; shape: a shape
-(struct stream-static (name shape runtime-id)
+;; shape: a shape; key: #f or syntax of the stream's key function;
+;; keying: #f or a hasheq of attribute names, as for sources
+(struct stream-static (name shape runtime-id [key #:auto] [keying #:auto])
+  #:auto-value #f #:mutable
   #:property prop:procedure
   (identifier-macro (λ (self) (stream-static-runtime-id self))
                     (λ (self stx) (raise-syntax-error #f "a stream is not a procedure" stx))))
@@ -168,3 +178,25 @@
              #`(record-domain (list #,@(for/list ([a (syntax->list #'(a ...))] [p parsed])
                                          #`(cons '#,a #,(cdr p))))))]
     [_ (raise-syntax-error #f "unknown value domain" stx)]))
+
+(define (make-stream-static name shp runtime-id #:key [key #f] #:keying [keying #f])
+  (define s (stream-static name shp runtime-id))
+  (set-stream-static-key! s key)
+  (set-stream-static-keying! s keying)
+  s)
+
+(define (make-source-static name types runtime-id #:keying [keying #f] #:head [head #f])
+  (define s (source-static name types runtime-id))
+  (set-source-static-keying! s keying)
+  (set-source-static-head! s head)
+  s)
+
+;; ---------------------------------------------------------------------------
+;; Clocks (TM.clock)
+
+(define clock-names '(event-time processing-time hybrid))
+(define (clock-name? v) (and (memq v clock-names) #t))
+(define (check-clock! id [allowed clock-names])
+  (unless (and (identifier? id) (memq (syntax-e id) allowed))
+    (raise-syntax-error #f (format "unknown clock; expected one of ~a" allowed) id))
+  (syntax-e id))

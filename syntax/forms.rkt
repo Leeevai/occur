@@ -7,6 +7,7 @@
          "../private/dataflow.rkt"
          "../private/io.rkt"
          "../private/registry.rkt"
+         "../private/ops/structure.rkt"
          (for-syntax racket/base
                      racket/list
                      racket/syntax
@@ -59,9 +60,22 @@
     [(_ name:id
         (~alt (~once (~seq #:types (t:id ...+)))
               (~optional (~seq #:from from))
-              (~optional (~seq #:watermark wm:watermark-strategy)))
+              (~optional (~seq #:watermark wm:watermark-strategy))
+              (~optional (~seq #:key ent:id))
+              (~optional (~seq #:substream sub:id))
+              (~optional (~seq #:kind kind:id))
+              (~optional (~seq #:merge (~and merge (~datum high-water-mark)))))
         ...)
      (define types (for/list ([t (syntax->list #'(t ...))]) (lookup-type t stx)))
+     (define src-shape (apply type-shape types))
+     (for ([a (list (attribute ent) (attribute sub) (attribute kind))] #:when a)
+       (check-attributes! 'source src-shape #`(#,a) stx))
+     (define keying
+       (for/hasheq ([k '(entity substream kind)] [a (list (attribute ent) (attribute sub) (attribute kind))]
+                    #:when a)
+         (values k (syntax-e a))))
+     (when (and (attribute merge) (not (attribute sub)))
+       (raise-syntax-error 'source "#:merge high-water-mark needs #:substream" stx (attribute merge)))
      (define type-names (map type-static-name types))
      (define data-expr
        (if (attribute from)
@@ -88,11 +102,24 @@
                                     #'from)])
            #'#f))
      (with-syntax ([rt (format-id #'name "~a-source" #'name)]
+                   [head (format-id #'name "~a-merged" #'name)]
                    [data data-expr]
-                   [wm (if (attribute wm) (attribute wm.expr) #''none)])
-       #'(begin
-           (define rt (make-source 'name #:types (list t ...) #:watermark wm #:data data))
-           (define-syntax name (source-static 'name (list (syntax-local-value #'t) ...) (quote-syntax rt)))
+                   [wm (if (attribute wm) (attribute wm.expr) #''none)]
+                   [keying keying]
+                   [sub-fn (cond [(and (attribute sub) (attribute ent))
+                                  #`(λ (e) (cons (event-attr e '#,(attribute ent)) (event-attr e '#,(attribute sub))))]
+                                 [(attribute sub) #`(attribute-key-fn '#,(attribute sub))]
+                                 [else #'#f])])
+       #`(begin
+           (define rt (make-source 'name #:types (list t ...) #:watermark wm #:data data
+                                   #:meta (hasheq 'keying 'keying)))
+           #,@(if (attribute merge)
+                  (list #'(define head (make-node (string->symbol (format "~a/merge" 'name))
+                                                  (monotonic-merge-operator sub-fn) (list rt))))
+                  '())
+           (define-syntax name (make-source-static 'name (list (syntax-local-value #'t) ...) (quote-syntax rt)
+                                                   #:keying 'keying
+                                                   #:head #,(if (attribute merge) #'(quote-syntax head) #'#f)))
            (registry-add-source! occur-registry rt)))]))
 
 ;; ---------------------------------------------------------------------------
@@ -101,13 +128,16 @@
 (define-syntax (define-stream stx)
   (syntax-parse stx
     [(_ name:id stage ...+)
-     (define-values (defs final shp) (compile-stages #'name (syntax->list #'(stage ...))))
+     (define-values (defs final shp key keying) (compile-stages #'name (syntax->list #'(stage ...))))
      (with-syntax ([(def ...) defs]
                    [final final]
-                   [shape-datum (shape-types shp)])
+                   [shape-datum (shape-types shp)]
+                   [key key]
+                   [keying keying])
        #'(begin
            def ...
-           (define-syntax name (stream-static 'name (shape 'shape-datum) (quote-syntax final)))
+           (define-syntax name (make-stream-static 'name (shape 'shape-datum) (quote-syntax final)
+                                                   #:key (quote-syntax key) #:keying 'keying))
            (registry-add-node! occur-registry final)))]))
 
 ;; ---------------------------------------------------------------------------

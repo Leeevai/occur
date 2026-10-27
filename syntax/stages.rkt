@@ -11,6 +11,7 @@
          "static.rkt"
          (for-template racket/base
                        "../private/event.rkt"
+                       "../private/ops/structure.rkt"
                        "../private/dataflow.rkt"
                        "../private/operator.rkt"
                        "../private/ops/stateless.rkt"
@@ -28,27 +29,31 @@
 
 ;; prev: identifier of the previous node (#f before the first stage)
 ;; shape: a shape, key: syntax of a key function expression or #f
-(struct stage-ctx (name prev shape key) #:transparent)
+;; keying: #f or a hasheq of attribute names ('entity 'substream 'kind)
+(struct stage-ctx (name prev shape key keying) #:transparent)
 ;; op: operator expression; inputs: list of input expressions (#f = prev)
 ;; extras: #f or (node-id -> list of definitions) spliced after the node
 ;; no-sink?: #t when the stream's own node must not be a sink (route)
-(struct stage-out (op inputs shape key [extras #:auto] [no-sink? #:auto])
+(struct stage-out (op inputs shape key [extras #:auto] [no-sink? #:auto] [keying #:auto])
   #:auto-value #f #:transparent #:mutable)
 
-(define (stage-out* op inputs shape key #:extras [extras #f] #:sink? [sink? #t])
+;; keying: 'same keeps the context's keying
+(define (stage-out* op inputs shape key #:extras [extras #f] #:sink? [sink? #t] #:keying [keying 'same])
   (define o (stage-out op inputs shape key))
   (set-stage-out-extras! o extras)
   (set-stage-out-no-sink?! o (not sink?))
+  (set-stage-out-keying! o keying)
   o)
 
 (define stage-table (make-hasheq))
 (define (register-stage! name proc) (hash-set! stage-table name proc))
 
-;; compile-stages : identifier (listof syntax) -> (values definitions final-id shape)
+;; compile-stages : identifier (listof syntax)
+;;                  -> (values definitions final-id shape key keying)
 (define (compile-stages name-id stages)
   (define name (syntax-e name-id))
   (define n (length stages))
-  (let loop ([stages stages] [i 1] [ctx (stage-ctx name #f #f #f)] [defs '()])
+  (let loop ([stages stages] [i 1] [ctx (stage-ctx name #f #f #f #f)] [defs '()])
     (define stg (car stages))
     (define head (syntax-parse stg [(h:id . _) (syntax-e #'h)] [_ #f]))
     (define proc (hash-ref stage-table head #f))
@@ -72,9 +77,11 @@
     (define extras (if (stage-out-extras out) ((stage-out-extras out) node-id) '()))
     (when (and (stage-out-extras out) (not last?))
       (raise-syntax-error 'define-stream "this stage must be the last stage of a stream" stg))
-    (define ctx2 (stage-ctx name node-id (stage-out-shape out) (stage-out-key out)))
+    (define keying (let ([k (stage-out-keying out)]) (if (or (eq? k 'same) (not k)) (if (eq? k 'same) (stage-ctx-keying ctx) #f) k)))
+    (define ctx2 (stage-ctx name node-id (stage-out-shape out) (stage-out-key out) keying))
     (if last?
-        (values (append (reverse (cons def defs)) extras) node-id (stage-out-shape out))
+        (values (append (reverse (cons def defs)) extras) node-id (stage-out-shape out)
+                (stage-ctx-key ctx2) (stage-ctx-keying ctx2))
         (loop (cdr stages) (add1 i) ctx2 (cons def defs)))))
 
 ;; ---------------------------------------------------------------------------
@@ -131,12 +138,19 @@
             up-shape
             (shape (filter (λ (p) (memq (car p) (map syntax-e (syntax->list #'(t ...)))))
                            (shape-types up-shape)))))
-      (stage-out (if (null? (syntax->list #'(t ...)))
-                     #'(make-operator 'from)
-                     #'(select-types-operator '(t ...)))
-                 (list (static-runtime-id v))
-                 selected
-                 #f)])))
+      (define keying (and (source-static? v) (source-static-keying v)))
+      (define head (or (and (source-static? v) (source-static-head v)) (static-runtime-id v)))
+      (define entity (and keying (hash-ref keying 'entity #f)))
+      (stage-out* (if (null? (syntax->list #'(t ...)))
+                      #'(make-operator 'from)
+                      #'(select-types-operator '(t ...)))
+                  (list head)
+                  selected
+                  (if entity
+                      #`(attribute-key-fn '#,entity)
+                      (and (stream-static? v)
+                           (let ([k (stream-static-key v)]) (and k (syntax-e k) k))))
+                  #:keying (or keying (and (stream-static? v) (stream-static-keying v))))])))
 
 ;; ---------------------------------------------------------------------------
 ;; (filter expr)                                                    OP.filter
@@ -288,6 +302,120 @@
                       #`(begin
                           (define #,br-node
                             (make-node '#,br (make-operator '#,br) (list (cons #,node-id #,port)) #:sink? #t))
-                          (define-syntax #,br (stream-static '#,br (shape '#,(shape-types shp))
-                                                             (quote-syntax #,br-node)))
+                          (define-syntax #,br (make-stream-static '#,br (shape '#,(shape-types shp))
+                                                                  (quote-syntax #,br-node)
+                                                                  #:key (quote-syntax #,(stage-ctx-key ctx))
+                                                                  #:keying '#,(stage-ctx-keying ctx)))
                           (registry-add-node! occur-registry #,br-node)))))])))
+
+;; ---------------------------------------------------------------------------
+;; (merge stream ...+): as the first stage, the union of the streams; later,
+;; the union of the pipeline so far and the streams.                ST.merge
+
+(register-stage!
+ 'merge
+ (λ (stx ctx)
+   (syntax-parse stx
+     [(_ up:id ...+)
+      (define vs (for/list ([u (syntax->list #'(up ...))]) (lookup-upstream u)))
+      (define shapes (for/list ([v vs])
+                       (if (source-static? v) (apply type-shape (source-static-types v)) (stream-static-shape v))))
+      (define heads (for/list ([v vs])
+                      (or (and (source-static? v) (source-static-head v)) (static-runtime-id v))))
+      (define prev (stage-ctx-prev ctx))
+      (define all-shapes (if prev (cons (stage-ctx-shape ctx) shapes) shapes))
+      (define inputs (if prev (cons prev heads) heads))
+      (stage-out* #`(merge-operator #,(length inputs))
+                  inputs
+                  (shape (remove-duplicates (append-map shape-types all-shapes)))
+                  (stage-ctx-key ctx))])))
+
+;; ---------------------------------------------------------------------------
+;; (key-by attr) or (key-by #:fn expr)                              ST.key-by
+
+(register-stage!
+ 'key-by
+ (λ (stx ctx)
+   (define shp (stage-ctx-shape ctx))
+   (syntax-parse stx
+     [(_ a:id)
+      (check-attributes! 'key-by shp #'(a) stx)
+      (define keying (hash-set (or (stage-ctx-keying ctx) (hasheq)) 'entity (syntax-e #'a)))
+      (stage-out* #'(key-by-operator (attribute-key-fn 'a)) #f shp #'(attribute-key-fn 'a)
+                  #:keying keying)]
+     [(_ #:fn f:expr)
+      (define fn (event-lambda shp #'f))
+      (stage-out* #`(key-by-operator #,fn) #f shp fn)])))
+
+;; ---------------------------------------------------------------------------
+;; (dedupe maybe-key #:horizon d maybe-clock)                       ST.dedupe
+
+(define (stage-clock stx id allowed)
+  (if id (check-clock! id allowed) 'event-time))
+
+(register-stage!
+ 'dedupe
+ (λ (stx ctx)
+   (define shp (stage-ctx-shape ctx))
+   (syntax-parse stx
+     [(_ (~alt (~optional (~seq #:key k:expr)) (~once (~seq #:horizon h:expr))
+               (~optional (~seq #:clock clk:id)))
+         ...)
+      (define clock (stage-clock stx (attribute clk) '(event-time processing-time)))
+      (stage-out* #`(dedupe-operator #,(if (attribute k) (event-lambda shp #'k) #'event-id)
+                                     #:horizon h #:clock '#,clock)
+                  #f shp (stage-ctx-key ctx))])))
+
+;; ---------------------------------------------------------------------------
+;; (monotonic-merge maybe-substream)                       ST.monotonic-merge
+;; Without #:substream, the sub-stream is the (entity, substream) pair of the
+;; source's keying.
+
+(define (substream-fn-of ctx stx)
+  (define ky (stage-ctx-keying ctx))
+  (define sub (and ky (hash-ref ky 'substream #f)))
+  (define ent (and ky (hash-ref ky 'entity #f)))
+  (cond [(and sub ent) #`(λ (e) (cons (event-attr e '#,ent) (event-attr e '#,sub)))]
+        [sub #`(attribute-key-fn '#,sub)]
+        [else (raise-syntax-error 'monotonic-merge
+                                  "no sub-stream: give #:substream or declare the source's #:substream"
+                                  stx)]))
+
+(register-stage!
+ 'monotonic-merge
+ (λ (stx ctx)
+   (define shp (stage-ctx-shape ctx))
+   (syntax-parse stx
+     [(_ (~optional (~seq #:substream s:expr)))
+      (stage-out* #`(monotonic-merge-operator
+                     #,(if (attribute s) (event-lambda shp #'s) (substream-fn-of ctx stx)))
+                  #f shp (stage-ctx-key ctx))])))
+
+;; ---------------------------------------------------------------------------
+;; (reorder maybe-late)                                             ST.reorder
+
+(register-stage!
+ 'reorder
+ (λ (stx ctx)
+   (syntax-parse stx
+     [(_ (~optional (~seq #:late (~and l (~or* (~datum drop) (~datum emit))))))
+      (stage-out* #`(reorder-operator #:key #,(or (stage-ctx-key ctx) #'#f)
+                                      #:late '#,(if (attribute l) (syntax-e #'l) 'drop))
+                  #f (stage-ctx-shape ctx) (stage-ctx-key ctx))])))
+
+;; ---------------------------------------------------------------------------
+;; (throttle #:rate r #:per d maybe-clock) | (throttle #:every n)
+;; | (throttle #:probability p #:seed s)                            ST.throttle
+
+(register-stage!
+ 'throttle
+ (λ (stx ctx)
+   (define key (or (stage-ctx-key ctx) #'#f))
+   (define (out mode) (stage-out* #`(throttle-operator #,mode #:key #,key)
+                                  #f (stage-ctx-shape ctx) (stage-ctx-key ctx)))
+   (syntax-parse stx
+     [(_ #:rate r:expr #:per d:expr (~optional (~seq #:clock clk:id)))
+      (define clock (stage-clock stx (attribute clk) '(event-time processing-time)))
+      (out #`(list 'rate r d '#,clock))]
+     [(_ #:every n:expr) (out #'(list 'every n))]
+     [(_ #:probability p:expr #:seed s:expr) (out #'(list 'probability p s))])))

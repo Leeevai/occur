@@ -137,3 +137,34 @@
 (spec-test 'OP.filter "stage expressions see the attributes of the shape"
   (check-compile-error (string-append ops-header "(define-stream s (from feed) (filter (> amont 1)))\n")
                        #rx"amont: unbound identifier" 4))
+
+(require (only-in "lang/structure.rkt" [occur-run structure-run] [occur-program structure-program]))
+
+(spec-test '(ST.monotonic-merge ES.substream) "#:merge high-water-mark merges per (entity, sub-stream)"
+  (define r (structure-run))
+  (check-equal? (map (λ (e) (list (event-attr e 'owner) (event-ts e) (event-te e) (event-n e)))
+                     (by-node r 'contributions))
+                '(("d1" 90 100 10) ("d1" 100 105 5) ("d2" 80 90 4)))
+  (check-equal? (run-result-counter r 'arrivals/merge 'late) 25))
+
+(spec-test '(ST.dedupe ST.merge ST.key-by ST.throttle ST.reorder) "structure stages run as declared"
+  (define r (structure-run))
+  (define (pid node) (map (λ (e) (event-attr e 'id)) (by-node r node)))
+  (check-equal? (pid 'unique) '("a" "b" "a"))
+  (check-equal? (pid 'both) '("a" "a" "b" "z" "a"))
+  (check-equal? (pid 'by-id) '("a"))          ; the second "a" of key a; b's first is dropped
+  (check-equal? (pid 'sampled) '("a" "a"))
+  (check-equal? (pid 'ordered) '("a" "a" "b" "a")))
+
+(define st-header
+  (string-append "#lang occur\n(event-type P [id : String])\n(source pings #:types (P))\n"))
+
+(spec-test 'TM.clock "unknown clocks are a compile-time error"
+  (check-compile-error (string-append st-header "(define-stream s (from pings)\n (dedupe #:horizon 5 #:clock wall))\n")
+                       #rx"unknown clock" 5))
+
+(spec-test 'ES.substream "source keying attributes are checked against the source's types"
+  (check-compile-error "#lang occur\n(event-type P [id : String])\n(source s #:types (P)\n #:key owner)\n"
+                       #rx"unknown attribute owner" 4)
+  (check-compile-error "#lang occur\n(event-type P [id : String])\n(source s #:types (P) #:key id\n #:merge high-water-mark)\n"
+                       #rx"needs #:substream" 4))
