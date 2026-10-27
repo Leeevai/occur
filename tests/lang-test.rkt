@@ -268,7 +268,8 @@
   (check-equal? (map (λ (e) (event-attr e 'tier)) (by-node r 'with-tier)) '("gold" "platinum"))
   (check-equal? (map (λ (e) (list (event-attr e 'account) (event-attr e 'tier))) (by-node r 'tier-then))
                 ;; the final step's outputs are grouped by key, b first (DR.ordered)
-                '(("b" #f) ("a" "gold") ("a" "platinum"))))
+                '(("b" #f) ("a" "gold") ("a" "platinum")))
+  (check-equal? (map event-payload (by-node r 'unpaid-selected)) (list (hasheq 'account "b" 'paid #f))))
 
 (spec-test 'JN.window "join keys are checked against both sides"
   (check-compile-error

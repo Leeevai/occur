@@ -22,10 +22,18 @@
 (define (joined type combine s r)
   (make-composite type (combine s r) (list s r) #:src 'join))
 
-;; An unmatched event of one side, with the other side's attributes null.
-(define (unmatched type e other-attrs side)
-  (make-composite type (for/fold ([p (nulls other-attrs)]) ([(k v) (in-hash (event-payload e))]) (hash-set p k v))
-                  (list e) #:src (if (eq? side 'left) 'left-outer-join 'right-outer-join)))
+;; An unmatched event of one side, with the other side's attributes null. A
+;; custom combine (a join's #:select) sees the other side as an event whose
+;; attributes are all null.
+(define (unmatched type combine e other-attrs side)
+  (define payload
+    (cond
+      [(eq? combine default-combine)
+       (for/fold ([p (nulls other-attrs)]) ([(k v) (in-hash (event-payload e))]) (hash-set p k v))]
+      [else
+       (define none (make-event 'Null (nulls other-attrs) #:ts (event-ts e) #:te (event-te e)))
+       (if (eq? side 'left) (combine e none) (combine none e))]))
+  (make-composite type payload (list e) #:src (if (eq? side 'left) 'left-outer-join 'right-outer-join)))
 
 (define outer/c (or/c #f 'left 'right 'full))
 (define (keeps-left? outer) (memq outer '(left full)))
@@ -87,7 +95,7 @@
                   (not (still-open? e))
                   (not (hash-ref seen (event-id e) #f)))
          (hash-set! seen (event-id e) #t)
-         (emit! c (unmatched type e (if (eq? side 'left) rattrs lattrs) side))))
+         (emit! c (unmatched type combine e (if (eq? side 'left) rattrs lattrs) side))))
      (and (positive? (hash-count remaining)) (struct-copy wj st [windows remaining])))))
 
 ;; ===========================================================================
@@ -133,10 +141,10 @@
      (define-values (old-r keep-r) (partition (λ (r) (< (+ (event-ts r) lower) W)) (ij-rights st)))
      (when (keeps-left? outer)
        (for ([s (reverse old-l)] #:unless (hash-ref (ij-matched st) (event-id s) #f))
-         (emit! c (unmatched type s rattrs 'left))))
+         (emit! c (unmatched type combine s rattrs 'left))))
      (when (keeps-right? outer)
        (for ([r (reverse old-r)] #:unless (hash-ref (ij-matched st) (event-id r) #f))
-         (emit! c (unmatched type r lattrs 'right))))
+         (emit! c (unmatched type combine r lattrs 'right))))
      (if (and (null? keep-l) (null? keep-r)) #f (ij keep-l keep-r (ij-matched st))))))
 
 (provide
@@ -172,7 +180,7 @@
      (cond
        [(= (ctx-port c) 1) e]                                    ; upsert
        [(event? row) (emit! c (joined type combine e row)) row]
-       [(keeps-left? outer) (emit! c (unmatched type e rattrs 'left)) row]
+       [(keeps-left? outer) (emit! c (unmatched type combine e rattrs 'left)) row]
        [else (count! c 'unmatched) row]))
    #:on-retract (λ (gl row e c) (if (and (event? row) (equal? (event-id row) (event-id e))) 'no-row row))))
 
@@ -208,7 +216,7 @@
      (for ([s (in-list (sort due < #:key event-ts))])          ; released in event-time order
        (define r (version-at (asof-versions st) (event-ts s)))
        (cond [r (emit! c (joined type combine s r))]
-             [(keeps-left? outer) (emit! c (unmatched type s rattrs 'left))]
+             [(keeps-left? outer) (emit! c (unmatched type combine s rattrs 'left))]
              [else (count! c 'unmatched)]))
      (asof (asof-versions st) later))))
 

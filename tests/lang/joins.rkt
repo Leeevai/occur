@@ -23,3 +23,8 @@
   (join payments #:kind window #:window (tumbling #:size 10) #:key account #:outer left #:type Unpaid))
 (define-stream with-tier (from orders) (join tiers #:kind table #:key account))
 (define-stream tier-then (from orders) (join tiers #:kind as-of #:key account #:outer left))
+;; an outer join's unmatched rows go through #:select, the other side null
+(define-stream unpaid-selected (from orders)
+  (join payments #:kind window #:window (tumbling #:size 10) #:key account #:outer left
+        #:select ([account left.account] [paid right.paid]))
+  (filter (not paid)))
