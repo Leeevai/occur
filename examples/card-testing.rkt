@@ -84,3 +84,17 @@
           Verified)
   #:where (increasing b.amount)
   #:emit (SuspectedFraud [card a.card] [n (count b)] [total (sum b.amount)]))  ; {e1, e2}
+
+;; ---------------------------------------------------------------------------
+;; Trace B, card c2: the verification between the swipes prevents every
+;; match, under every selection strategy.
+
+(source trace-b #:types (Swipe Verified) #:key card #:watermark ascending
+  #:from (events (Swipe #:at (minutes 1) #:id "f1" [card "c2"] [amount 1])
+                 (Verified #:at (minutes 2) #:id "f2" [card "c2"])
+                 (Swipe #:at (minutes 3) #:id "f3" [card "c2"] [amount 800])))
+
+(card-testing b-strict    trace-b strict    every)  ; no match
+(card-testing b-partition trace-b partition every)  ; no match
+(card-testing b-next      trace-b next      every)  ; no match
+(card-testing b-any       trace-b any       every)  ; no match
