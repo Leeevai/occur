@@ -90,6 +90,16 @@
 (spec-test 'OUT.maximal "maximal: only matches not strictly contained in another"
   (check-equal? (ids (outputs ab+ bs #:output 'maximal)) '(("a1" "b1" "b2"))))
 
+(spec-test '(OUT.maximal OUT.last EVAL.deferred) "without a bound, last and maximal output wait for the end of the stream"
+  ;; a later b could extend any match of a ; b+, so nothing is final before the end
+  (define unbounded (seq a (kleene+ b)))
+  (define steps (append (for/list ([e bs]) (arrive (event-te e) 'in e))
+                        (list (watermark-to 'in 1000) (advance-to 2000) (arrive 2000 'in (B "b3" 1500)))))
+  (for ([o '(maximal last)])
+    (check-equal? (outputs unbounded bs #:output o #:steps steps) '((2000 "a1" "b1" "b2" "b3")) (format "~a" o)))
+  ;; a match without events is contained in every other match
+  (check-equal? (ids (outputs (within (kleene* b) 100) bs #:output 'maximal)) '(("b1" "b2"))))
+
 ;; --- §12.3 skipping (the example of Flink CEP's after-match skip) ------------
 (define bc (seq (kleene+ b) c))
 (define bbbc (list (B "b1" 1) (B "b2" 2) (B "b3" 3) (C "c" 4)))

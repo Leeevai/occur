@@ -105,7 +105,8 @@
 ;;   1. evaluation timing: a candidate is released at once (EVAL.immediate),
 ;;      or when the watermark passes the end of its scope (EVAL.deferred; the
 ;;      scope ends at ts + Δ under #:within Δ, else at te), which last and
-;;      maximal output force;
+;;      maximal output force; they also wait for the end of the stream when
+;;      the pattern has no top-level bound (see scope-end);
 ;;   2. skipping: candidates whose initiator lies in a range discarded by an
 ;;      earlier match are dropped (SKIP.*);
 ;;   3. consumption: candidates using consumed events are dropped, and the
@@ -136,15 +137,29 @@
   (define is (for/list ([e (in-list (pmatch-events m))]) (hash-ref index (event-id e))))
   (if (null? is) (values -1 -1) (values (apply min is) (apply max is))))
 
+;; The end of a candidate's scope: ts + Δ under a top-level within Δ, else
+;; te. Last and maximal output must wait until no further extension is
+;; possible (OUT.last, OUT.maximal): without a top-level bound that is the
+;; end of the stream, and so it is for a match without events under maximal
+;; output, since every other match contains it.
 (define (scope-end pol m)
-  (if (match-policy-within pol) (+ (pmatch-ts m) (match-policy-within pol)) (pmatch-te m)))
+  (define Δ (match-policy-within pol))
+  (define output (match-policy-output pol))
+  (cond
+    [(and (memq output '(last maximal)) (not Δ)) +inf.0]
+    [(and (eq? output 'maximal) (null? (pmatch-events m))) +inf.0]
+    [Δ (+ (pmatch-ts m) Δ)]
+    [else (pmatch-te m)]))
 
 (define (deferred? pol) (or (eq? (match-policy-eval pol) 'deferred) (memq (match-policy-output pol) '(last maximal))))
 
-;; latest: the index of the newest event that could begin the pattern
+;; latest: the index of the newest event that could begin the pattern. A
+;; candidate is released once the watermark is strictly past its scope, or
+;; at the final watermark when its scope is the whole stream.
 (define (make-cand pol m index latest reason)
   (define-values (lo hi) (match-index-range m index))
-  (cand m lo hi latest (if (deferred? pol) (strictly-after (scope-end pol m)) #f) reason))
+  (define end (and (deferred? pol) (scope-end pol m)))
+  (cand m lo hi latest (and end (if (eqv? end +inf.0) +inf.0 (strictly-after end))) reason))
 
 (define (released? c W) (or (not (cand-release c)) (deadline-due? (cand-release c) W)))
 
