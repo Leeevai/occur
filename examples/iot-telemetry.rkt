@@ -50,8 +50,9 @@
   (window (landmark #:from 0))
   (aggregate [hottest (max value)] [readings (count)]))
 
-;; WN.punctuated: what the sensors saw while the door was open
+;; WN.punctuated: what a pump's sensors saw while its door was open
 (define-stream door-open (from telemetry Reading Door)
+  (key-by device)
   (window (punctuated #:open (equal? state "open") #:close (equal? state "closed"))))
 
 ;; ---------------------------------------------------------------------------
