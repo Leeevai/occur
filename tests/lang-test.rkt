@@ -444,3 +444,10 @@
   ;; after deduplication by identity each trigger appears once
   (check-equal? (length (remove-duplicates (map (λ (o) (event-attr (output-item o) 'identity)) (run-result-outputs r))))
                 (length (dedupe-outputs (run-result-outputs r)))))
+
+(require (only-in "lang/merge-lifecycle.rkt" [occur-run merge-lifecycle-run]))
+
+(spec-test '(ST.monotonic-merge CX.entity) "a source's merge forgets the marks of a device the directory removed"
+  (define r (merge-lifecycle-run))
+  (check-equal? (map (λ (e) (list (event-ts e) (event-te e) (event-n e))) (by-node r 'contributions))
+                '((90 100 10) (80 90 10))))

@@ -410,7 +410,7 @@
 ;; ---------------------------------------------------------------------------
 ;; (monotonic-merge maybe-substream)                       ST.monotonic-merge
 ;; Without #:substream, the sub-stream is the (entity, substream) pair of the
-;; source's keying.
+;; source's keying. A stream with an entity merges keyed by that entity.
 
 (define (substream-fn-of ctx stx)
   (define ky (stage-ctx-keying ctx))
@@ -428,8 +428,12 @@
    (define shp (stage-ctx-shape ctx))
    (syntax-parse stx
      [(_ (~optional (~seq #:substream s:expr)))
+      ;; keyed by the stream's entity when it has one, so that dropping an
+      ;; entity forgets its sub-streams' marks
+      (define ent (let ([ky (stage-ctx-keying ctx)]) (and ky (hash-ref ky 'entity #f))))
       (stage-out* #`(monotonic-merge-operator
-                     #,(if (attribute s) (event-lambda shp #'s) (substream-fn-of ctx stx)))
+                     #,(if (attribute s) (event-lambda shp #'s) (substream-fn-of ctx stx))
+                     #:entity #,(if ent #`(attribute-key-fn '#,ent) #'#f))
                   #f shp (stage-ctx-key ctx))])))
 
 ;; ---------------------------------------------------------------------------

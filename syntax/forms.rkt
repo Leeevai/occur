@@ -156,7 +156,8 @@
                   '())
            #,@(if (attribute merge)
                   (list #`(define head (make-node (string->symbol (format "~a/merge" 'name))
-                                                  (monotonic-merge-operator sub-fn)
+                                                  (monotonic-merge-operator
+                                                   sub-fn #:entity #,(if (attribute ent) #`(attribute-key-fn '#,(attribute ent)) #'#f))
                                                   (list #,(cond [(attribute dir) #'gate]
                                                                 [(attribute skew) #'guard]
                                                                 [else #'rt])))))
