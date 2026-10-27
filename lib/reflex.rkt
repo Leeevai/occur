@@ -7,7 +7,8 @@
 ;; a private module, and the runtime has no case for Reflex
 ;; (tests/reflex-purity.rkt checks the first).
 (provide DataArrival SensorData Trigger
-         sensor-write)
+         sensor-write
+         accumulate)
 
 ;; ---------------------------------------------------------------------------
 ;; §16.1 Inputs
@@ -29,6 +30,19 @@
 ;; written (ES.batch): n samples over [first_ts, last_ts], a reference to the
 ;; sensor's samples with the newest value as its summary.
 (event-type SensorData [owner : String] [sensor : String] [type : String] #:derived)
+
+;; ---------------------------------------------------------------------------
+;; §16.2 Conditions
+;;
+;; A rule has one of four conditions. Each is a name for the core condition
+;; that §16.2 gives it, with Reflex's parameter names.
+
+;; accumulate(N, S) = PT.accumulate over WN.since-last, on the watched kinds:
+;; ready once the contributions since the last trigger reach N samples
+;; (AG.multiplicity) and span S seconds (AG.span). A binding may override
+;; both.
+(define-condition accumulate #:as pt:accumulate
+  #:rename ([#:min-samples #:count] [#:min-span-s #:span]))
 
 ;; ---------------------------------------------------------------------------
 ;; §16.3 Outputs
