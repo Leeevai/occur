@@ -67,28 +67,28 @@ Status values: `todo`, `partial`, `done`.
 | `CX.entity` | §7 | `(directory d #:from ...)`, source `#:directory d`, `(context (entity d))` | `entity-context-operator` `directory-push` (private/context.rkt) | tests/context-test.rkt, tests/lang-test.rkt |  | partial |
 | `CX.activation` | §7 | `(activations)` stage; lifecycle `activate` signals | `signal` with the activation instant, `activations-operator` (private/context.rkt) | tests/context-test.rkt, tests/lang-test.rkt |  | partial |
 | `CX.composite` | §7 | `(context (and c ...))` | `composite-context` (private/context.rkt) | tests/context-test.rkt, tests/lang-test.rkt |  | partial |
-| `AG.count` | §8 | | | | | todo |
-| `AG.multiplicity` | §8 | | | | | todo |
-| `AG.events` | §8 | | | | | todo |
-| `AG.sum` | §8 | | | | | todo |
-| `AG.min` | §8 | | | | | todo |
-| `AG.max` | §8 | | | | | todo |
-| `AG.avg` | §8 | | | | | todo |
-| `AG.variance` | §8 | | | | | todo |
-| `AG.first` | §8 | | | | | todo |
-| `AG.last` | §8 | | | | | todo |
-| `AG.span` | §8 | | | | | todo |
-| `AG.sources` | §8 | | | | | todo |
-| `AG.collect` | §8 | | | | | todo |
-| `AG.argmax` | §8 | | | | | todo |
-| `AG.argmin` | §8 | | | | | todo |
-| `AG.median` | §8 | | | | | todo |
-| `AG.percentile` | §8 | | | | | todo |
-| `AG.count-distinct` | §8 | | | | | todo |
-| `AG.mode` | §8 | | | | | todo |
-| `AG.top-k` | §8 | | | | | todo |
-| `AG.approx` | §8 | | | | | todo |
-| `AG.incremental` | §8 | (M7) | accumulator `remove` in count windows (private/window.rkt) | tests/window-test.rkt, tests/window-prop-test.rkt |  | partial |
+| `AG.count` | §8 | `(count)` in `(aggregate ...)` | `count-agg` (private/aggregate.rkt) | tests/aggregate-test.rkt, tests/lang-test.rkt |  | partial |
+| `AG.multiplicity` | §8 | `(count)` / `(multiplicity)` in `(aggregate ...)` | `multiplicity-agg` (private/aggregate.rkt) | tests/aggregate-test.rkt, tests/lang-test.rkt |  | partial |
+| `AG.events` | §8 | `(events)` in `(aggregate ...)` | `events-agg` (private/aggregate.rkt) | tests/aggregate-test.rkt, tests/lang-test.rkt |  | partial |
+| `AG.sum` | §8 | `(sum e)` in `(aggregate ...)` | `sum-agg` (private/aggregate.rkt) | tests/aggregate-test.rkt, tests/lang-test.rkt |  | partial |
+| `AG.min` | §8 | `(min e)` in `(aggregate ...)` | `min-agg` (private/aggregate.rkt) | tests/aggregate-test.rkt, tests/lang-test.rkt |  | partial |
+| `AG.max` | §8 | `(max e)` in `(aggregate ...)` | `max-agg` (private/aggregate.rkt) | tests/aggregate-test.rkt, tests/lang-test.rkt |  | partial |
+| `AG.avg` | §8 | `(avg e)` in `(aggregate ...)` | `avg-agg` (private/aggregate.rkt) | tests/aggregate-test.rkt, tests/lang-test.rkt |  | partial |
+| `AG.variance` | §8 | `(variance e)` `(stddev e)` `#:sample` in `(aggregate ...)` | `variance-agg` `stddev-agg` (private/aggregate.rkt) | tests/aggregate-test.rkt, tests/lang-test.rkt |  | partial |
+| `AG.first` | §8 | `(first e)` in `(aggregate ...)` | `first-agg` (private/aggregate.rkt) | tests/aggregate-test.rkt, tests/lang-test.rkt |  | partial |
+| `AG.last` | §8 | `(last e)` in `(aggregate ...)` | `last-agg` (private/aggregate.rkt) | tests/aggregate-test.rkt, tests/lang-test.rkt |  | partial |
+| `AG.span` | §8 | `(span)` in `(aggregate ...)` | `span-agg` (private/aggregate.rkt) | tests/aggregate-test.rkt, tests/lang-test.rkt |  | partial |
+| `AG.sources` | §8 | `(sources)` / `(sources sub kind)` in `(aggregate ...)` | `sources-agg` (private/aggregate.rkt) | tests/aggregate-test.rkt, tests/lang-test.rkt |  | partial |
+| `AG.collect` | §8 | `(collect e)` in `(aggregate ...)` | `collect-agg` (private/aggregate.rkt) | tests/aggregate-test.rkt, tests/lang-test.rkt |  | partial |
+| `AG.argmax` | §8 | `(argmax e)` in `(aggregate ...)` | `argmax-agg` (private/aggregate.rkt) | tests/aggregate-test.rkt, tests/lang-test.rkt |  | partial |
+| `AG.argmin` | §8 | `(argmin e)` in `(aggregate ...)` | `argmin-agg` (private/aggregate.rkt) | tests/aggregate-test.rkt, tests/lang-test.rkt |  | partial |
+| `AG.median` | §8 | `(median e)` in `(aggregate ...)` | `median-agg` (private/aggregate.rkt) | tests/aggregate-test.rkt, tests/lang-test.rkt |  | partial |
+| `AG.percentile` | §8 | `(percentile e p)` in `(aggregate ...)` | `percentile-agg` (private/aggregate.rkt) | tests/aggregate-test.rkt, tests/lang-test.rkt |  | partial |
+| `AG.count-distinct` | §8 | `(count-distinct e)` in `(aggregate ...)` | `count-distinct-agg` (private/aggregate.rkt) | tests/aggregate-test.rkt, tests/lang-test.rkt |  | partial |
+| `AG.mode` | §8 | `(mode e)` in `(aggregate ...)` | `mode-agg` (private/aggregate.rkt) | tests/aggregate-test.rkt, tests/lang-test.rkt |  | partial |
+| `AG.top-k` | §8 | `(top-k e k #:by value/frequency)` in `(aggregate ...)` | `top-k-agg` (private/aggregate.rkt) | tests/aggregate-test.rkt, tests/lang-test.rkt |  | partial |
+| `AG.approx` | §8 | `(approx-distinct e)` `(approx-percentile e p)` `(approx-frequency e x)` `(count-min e)` in `(aggregate ...)` | `approx-distinct-agg` `approx-percentile-agg` `approx-frequency-agg` (private/sketch.rkt) | tests/sketch-test.rkt, tests/lang-test.rkt |  | partial |
+| `AG.incremental` | §8 | windowed `(aggregate ...)` after `(window ...)` in `(aggregate ...)` | `aggregate-accumulator`, two-stack queue, `mono-deque` (private/aggregate.rkt, private/window.rkt) | tests/aggregate-test.rkt, tests/incremental-test.rkt, tests/window-prop-test.rkt |  | partial |
 | `JN.window` | §9 | | | | | todo |
 | `JN.interval` | §9 | | | | | todo |
 | `JN.table` | §9 | | | | | todo |
