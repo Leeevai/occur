@@ -65,3 +65,17 @@
   (define r2 (run (ex:occur-program) unverified))
   (for ([node '(b-strict b-partition b-next b-any)])
     (check-equal? (matches r2 node) '(("f1" "f3")) (format "~a" node))))
+
+(require (prefix-in ref: "lang/card-testing-reference.rkt"))
+
+(spec-test '(PT.sequence PT.negation PT.span-absence PT.kleene-plus SEL.strict SEL.partition SEL.next SEL.any
+             OUT.every OUT.maximal)
+           "the incremental engine and the reference oracle derive the same events from traces A, A′, and B"
+  (define (rows r)
+    (sort (for/list ([o (run-result-outputs r)])
+            (define e (output-item o))
+            (list (output-node o) (map event-id (event-constituents e)) (event-ts e) (event-te e) (event-payload e)))
+          (λ (a b) (string<? (format "~s" a) (format "~s" b)))))
+  (define oracle (ref:occur-run))
+  (check-equal? (rows r) (rows oracle))
+  (check-equal? (length (run-result-outputs oracle)) 14))
