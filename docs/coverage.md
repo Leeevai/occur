@@ -26,12 +26,12 @@ Status values: `todo`, `partial`, `done`.
 | `ES.keyed` | §2 | (M4) `(key-by attr)` | `partition-stream` (private/stream.rkt) | tests/stream-test.rkt |  | partial |
 | `ES.substream` | §2 | (M4) `#:key` `#:substream` `#:kind` | `attribute-keying` `watching` (private/stream.rkt) | tests/stream-test.rkt |  | partial |
 | `ES.operator` | §2 | `define-stream` stages compile to operators | `make-operator` `run-operator` (private/operator.rkt, private/dataflow.rkt) | tests/operator-test.rkt, tests/dataflow-test.rkt |  | partial |
-| `OP.filter` | §4 | | | | | todo |
-| `OP.project` | §4 | | | | | todo |
-| `OP.map` | §4 | | | | | todo |
-| `OP.enrich` | §4 | | | | | todo |
-| `OP.split` | §4 | | | | | todo |
-| `OP.route` | §4 | | | | | todo |
+| `OP.filter` | §4 | `(filter expr)` stage | `filter-operator` (private/ops/stateless.rkt) | tests/stateless-test.rkt, tests/stateless-prop-test.rkt, tests/lang-test.rkt |  | partial |
+| `OP.project` | §4 | `(project a ... #:as T)` stage | `project-operator` (private/ops/stateless.rkt) | tests/stateless-test.rkt, tests/stateless-prop-test.rkt, tests/lang-test.rkt |  | partial |
+| `OP.map` | §4 | `(map T [a e] ...)` / `(map [a e] ...)` stage | `map-operator` (private/ops/stateless.rkt) | tests/stateless-test.rkt, tests/stateless-prop-test.rkt, tests/lang-test.rkt |  | partial |
+| `OP.enrich` | §4 | `(enrich #:key k #:with R #:adds (...))` stage | `enrich-operator` `table-lookup` (private/ops/stateless.rkt) | tests/stateless-test.rkt, tests/lang-test.rkt |  | partial |
+| `OP.split` | §4 | `(split T #:for (...) [a e] ... #:ts e)` stage | `split-operator` (private/ops/stateless.rkt) | tests/stateless-test.rkt, tests/stateless-prop-test.rkt, tests/lang-test.rkt |  | partial |
+| `OP.route` | §4 | `(route #:mode m [b p] ... #:otherwise b)` final stage | `route-operator` (private/ops/stateless.rkt) | tests/stateless-test.rkt, tests/stateless-prop-test.rkt, tests/lang-test.rkt |  | partial |
 | `ST.monotonic-merge` | §5 | | | | | todo |
 | `ST.merge` | §5 | | | | | todo |
 | `ST.key-by` | §5 | | | | | todo |
