@@ -96,8 +96,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reference oracle; the reference engine applies the selection strategies
   with every or maximal output; an examples chapter in the manual.
 
+- Reflex (M17): `lib/reflex.rkt`, Reflex as a library of public occur forms
+  (its types, device directory, four conditions, `reflex-rule`,
+  `define-reflex`, and fleet health), with traces R1 to R6 of §16.7, a
+  fleet, health, and recovery as programs in `examples/reflex/`, and
+  `docs/reflex.md` mapping §16.6 row by row. The surface gained what the
+  library needed: reference events from `split`, sub-streams and kinds on
+  `key-by`, condition renames that convert values, view projections and
+  lifecycle, script start times and `run-options`, rule versions pushed by
+  scripts, and a merge keyed by entity. A module that declares nothing to
+  run is a library and exports only what it provides.
+
 ### Fixed
 
+- A rule's max_delay clock restarts after a consuming output, instead of
+  flushing a later contribution at once.
+- A cold start holds a rules node's outputs at the node, so stages after it
+  see them coalesced per instance and judged.
+- JSON rule items keep their watched kinds as strings, the kinds of JSON
+  data.
 - Last and maximal output of a pattern without a top-level bound, and an
   event-less match under maximal output, are held until the end of the
   stream instead of being reported before an extension could arrive;
