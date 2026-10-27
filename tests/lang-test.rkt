@@ -451,3 +451,15 @@
   (define r (merge-lifecycle-run))
   (check-equal? (map (λ (e) (list (event-ts e) (event-te e) (event-n e))) (by-node r 'contributions))
                 '((90 100 10) (80 90 10))))
+
+(require (only-in "lang/rekey.rkt" [occur-run rekey-run]))
+
+(spec-test '(ES.substream ST.key-by ST.monotonic-merge) "key-by declares sub-streams and kinds for the merge and the rules"
+  (define r (rekey-run))
+  (check-equal? (map (λ (e) (list (event-attr e 'reason) (event-attr e 'window) (event-attr e 'samples) (event-attr e 'sources)))
+                     (by-node r 'triggers))
+                '((samples (1 3) 2 (("s1" . "load")))))
+  (check-equal? (run-result-counter r 'contributions 'late) 1)
+  (check-compile-error (string-append "#lang occur\n(event-type W [owner : String] [type : String])\n(source w #:types (W))\n"
+                                      "(define-stream s (from w)\n (key-by owner #:kind type))\n")
+                       #rx"#:kind needs #:substream" 5))

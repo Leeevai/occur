@@ -372,16 +372,23 @@
                   (stage-ctx-key ctx))])))
 
 ;; ---------------------------------------------------------------------------
-;; (key-by attr) or (key-by #:fn expr)                              ST.key-by
+;; (key-by attr maybe-substream maybe-kind) or (key-by #:fn expr)     ST.key-by
+;; With #:substream s and #:kind m, the entity attr owns sub-streams named
+;; by s, each of kind m (ES.substream), as a source's keying declares them.
 
 (register-stage!
  'key-by
  (λ (stx ctx)
    (define shp (stage-ctx-shape ctx))
    (syntax-parse stx
-     [(_ a:id)
-      (check-attributes! 'key-by shp #'(a) stx)
-      (define keying (hash-set (or (stage-ctx-keying ctx) (hasheq)) 'entity (syntax-e #'a)))
+     [(_ a:id (~alt (~optional (~seq #:substream sub:id)) (~optional (~seq #:kind kind:id))) ...)
+      (check-attributes! 'key-by shp #`(a #,@(filter values (list (attribute sub) (attribute kind)))) stx)
+      (when (and (attribute kind) (not (attribute sub)))
+        (raise-syntax-error 'key-by "#:kind needs #:substream: kinds belong to sub-streams" stx (attribute kind)))
+      (define keying
+        (for/fold ([h (hash-set (or (stage-ctx-keying ctx) (hasheq)) 'entity (syntax-e #'a))])
+                  ([k '(substream kind)] [v (list (attribute sub) (attribute kind))] #:when v)
+          (hash-set h k (syntax-e v))))
       (stage-out* #'(key-by-operator (attribute-key-fn 'a)) #f shp #'(attribute-key-fn 'a)
                   #:keying keying)]
      [(_ #:fn f:expr)
