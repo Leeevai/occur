@@ -29,3 +29,4 @@ time.
 @include-section["event-space.scrbl"]
 @include-section["language.scrbl"]
 @include-section["runner.scrbl"]
+@include-section["operations.scrbl"]
