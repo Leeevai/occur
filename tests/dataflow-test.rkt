@@ -203,3 +203,13 @@
   (define n (make-node 'gen gen '() #:sink? #t))
   (define r (run (make-program (list n)) (list (advance-to 35)) #:clock (simulated-clock 5)))
   (check-equal? (ats r) '(15 25 35)))
+
+(test-case "a timer that changes nothing does not re-arm a deadline that is already due"
+  ;; this operator's event deadline never moves; at the final watermark it
+  ;; would otherwise be woken forever
+  (define stuck (make-operator 'stuck #:init-key (λ (g k c) 'pending)
+                               #:on-event (λ (g s e c) s)
+                               #:event-deadline (λ (s) 5)
+                               #:on-timer (λ (g s c) s)))
+  (define n (make-node 'stuck stuck (list src) #:sink? #t))
+  (check-equal? (run-result-outputs (run (make-program (list n)) (list (arrive 1 'in (ev "a" 1))))) '()))

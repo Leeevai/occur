@@ -255,12 +255,16 @@
     (set-runner-reports! r (cons (cons name d) (runner-reports r))))
   (ctx-emissions c))
 
-(define (rearm! r name key kstate)
+(define (rearm! r name key kstate #:stalled? [stalled? #f])
   (define op (node-op* r name))
+  ;; A timer callback that left the state unchanged must not re-arm a
+  ;; deadline that is already due: that would wake it again with nothing to
+  ;; do, forever (for example at the final watermark).
   (define d ((operator-deadline op) kstate))
-  (when d (set-runner-pdl! r (deadlines-arm (runner-pdl r) (cons name key) d)))
+  (when (and d (not (and stalled? (<= d (runner-now r)))))
+    (set-runner-pdl! r (deadlines-arm (runner-pdl r) (cons name key) d)))
   (define ed ((operator-event-deadline op) kstate))
-  (when ed
+  (when (and ed (not (and stalled? (<= ed (W r name)))))
     (set-runner-edl! r (hash-update (runner-edl r) name (λ (dl) (deadlines-arm dl key ed))))))
 
 (define (set-key-state! r name key kstate)
@@ -284,7 +288,7 @@
   (define kstate (or existing (and create? (with-ids r (λ () ((operator-init-key op) g key c))))))
   (define new (with-ids r (λ () (proc g kstate c))))
   (set-key-state! r name key new)
-  (when new (rearm! r name key new))
+  (when new (rearm! r name key new #:stalled? (and clock (eq? new kstate))))
   (propagate! r name key (absorb-ctx! r name c)))
 
 ;; Run a global callback: (proc global keys ctx) -> (values global keys).
