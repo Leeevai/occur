@@ -67,3 +67,22 @@
 (test-case "a payload outside D_τ is rejected when the event is built"
   (check-exn #rx"payload not in D_Swipe"
              (λ () (eval-occur (string-append header "(define e (Swipe #:at 1 [card 7] [amount 1]))\n")))))
+
+(require (only-in "lang/scripted.rkt" [occur-steps scripted-steps] [occur-run scripted-run]
+                  [occur-program scripted-program]))
+
+(spec-test '(TM.processing-time ES.stream) "a script replaces the data; processing time is simulated"
+  (define steps (scripted-steps))
+  (check-equal? (map (λ (s) (cond [(step:arrive? s) 'arrive] [(step:advance? s) 'advance]
+                                  [(step:watermark? s) 'watermark] [(step:suspend? s) 'suspend]))
+                     steps)
+                '(arrive advance watermark arrive suspend))
+  (define r (scripted-run))
+  (check-equal? (rendered r) '((5 verified "v1")))
+  (check-equal? (run-result-now r) 90))
+
+(spec-test 'ES.stream "a JSON Lines source is read relative to its module"
+  (define p (scripted-program))
+  (define src (hash-ref (program-sources p) 'feed))
+  (check-equal? (length ((source-data src))) 4)
+  (check-equal? (source-watermark src) '(bounded-delay 30)))
