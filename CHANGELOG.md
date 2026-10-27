@@ -48,3 +48,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   aggregates (HyperLogLog, t-digest, Count-Min on a deterministic hash),
   incremental maintenance with remove, two-stack queues, and monotonic
   deques, and the `(aggregate ...)` stage fused with windows.
+- Joins (M8): windowed, interval, stream-table, and as-of joins with left,
+  right, and full outer variants, and the `(join ...)` stage with `left.`
+  and `right.` attribute references.
