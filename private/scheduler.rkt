@@ -102,3 +102,131 @@
   [deadlines-next (-> deadlines? (or/c #f real?))]
   [deadlines-pop-due (-> deadlines? real? (values any/c (or/c #f real?) deadlines?))]
   [deadlines-tokens (-> deadlines? list?)]))
+
+;; ===========================================================================
+;; TM.schedule: five-field cron expressions, read in UTC.
+;;
+;;   minute (0-59)  hour (0-23)  day-of-month (1-31)  month (1-12 or JAN-DEC)
+;;   day-of-week (0-7 or SUN-SAT; 0 and 7 are Sunday)
+;;
+;; Each field is a comma-separated list of `*`, `n`, `a-b`, with an optional
+;; step `/s`. When both day fields are restricted, a day matches if either
+;; matches (the traditional cron rule); otherwise the restricted one decides.
+;; See docs/decisions/0006-calendar-schedules.md.
+(require racket/string
+         racket/list
+         "time.rkt")
+
+(struct cron (text minutes hours doms months dows dom-any? dow-any?) #:transparent)
+
+(define month-names '("JAN" "FEB" "MAR" "APR" "MAY" "JUN" "JUL" "AUG" "SEP" "OCT" "NOV" "DEC"))
+(define dow-names '("SUN" "MON" "TUE" "WED" "THU" "FRI" "SAT"))
+
+(define (cron-error text msg)
+  (raise-arguments-error 'parse-cron msg "expression" text))
+
+(define (parse-value text s lo hi names)
+  (define u (string-upcase s))
+  (define named (and names (for/first ([n names] [i (in-naturals)] #:when (equal? n u)) i)))
+  (define v (or (and named (+ named (if (eq? names month-names) 1 0))) (string->number s)))
+  (unless (and (exact-integer? v) (<= lo v hi))
+    (cron-error text (format "~a is out of range ~a-~a" s lo hi)))
+  v)
+
+(define (parse-field text field lo hi names)
+  (define vals
+    (for*/list ([item (in-list (string-split field ","))]
+                [v (in-list
+                    (let* ([parts (string-split item "/" #:trim? #f)]
+                           [range (car parts)]
+                           [step (if (= (length parts) 2)
+                                     (let ([n (string->number (cadr parts))])
+                                       (unless (exact-positive-integer? n) (cron-error text "bad step"))
+                                       n)
+                                     1)]
+                           [bounds (cond [(equal? range "*") (list lo hi)]
+                                         [(regexp-match #rx"^([^-]+)-([^-]+)$" range)
+                                          => (λ (m) (list (parse-value text (cadr m) lo hi names)
+                                                          (parse-value text (caddr m) lo hi names)))]
+                                         [else (define v (parse-value text range lo hi names))
+                                               (list v (if (= step 1) v hi))])])
+                      (when (> (length parts) 2) (cron-error text "bad step"))
+                      (when (> (car bounds) (cadr bounds)) (cron-error text "a range must ascend"))
+                      (for/list ([v (in-range (car bounds) (add1 (cadr bounds)) step)]) v)))])
+      v))
+  (sort (remove-duplicates vals) <))
+
+(define (parse-cron text)
+  (define fields (string-split text))
+  (unless (= (length fields) 5)
+    (cron-error text "a cron expression has five fields: minute hour day-of-month month day-of-week"))
+  (define-values (mi h dom mo dow) (apply values fields))
+  (cron text
+        (parse-field text mi 0 59 #f)
+        (parse-field text h 0 23 #f)
+        (parse-field text dom 1 31 #f)
+        (parse-field text mo 1 12 month-names)
+        (remove-duplicates (map (λ (d) (if (= d 7) 0 d)) (parse-field text dow 0 7 dow-names)))
+        (equal? dom "*")
+        (equal? dow "*")))
+
+(define (cron-day-matches? c d wd)
+  (define dom? (memv d (cron-doms c)))
+  (define dow? (memv wd (cron-dows c)))
+  (cond [(and (cron-dom-any? c) (cron-dow-any? c)) #t]
+        [(cron-dom-any? c) (and dow? #t)]
+        [(cron-dow-any? c) (and dom? #t)]
+        [else (and (or dom? dow?) #t)]))
+
+(define (cron-matches? c t)
+  (define-values (y mo d h mi s wd) (utc-fields t))
+  (and (memv mo (cron-months c)) (cron-day-matches? c d wd)
+       (memv h (cron-hours c)) (memv mi (cron-minutes c)) #t))
+
+(define search-limit 200000)
+
+(define (start-of-day y mo d) (utc y mo d))
+(define (start-of-next-month y mo) (if (= mo 12) (utc (add1 y) 1 1) (utc y (add1 mo) 1)))
+
+;; The first tick strictly after t, or #f if none exists (for example 30 February).
+(define (cron-next c t)
+  (let loop ([m (+ (* 60 (floor (/ t 60))) 60)] [i 0])
+    (cond
+      [(> i search-limit) #f]
+      [else
+       (define-values (y mo d h mi s wd) (utc-fields m))
+       (cond
+         [(not (memv mo (cron-months c))) (loop (start-of-next-month y mo) (add1 i))]
+         [(not (cron-day-matches? c d wd)) (loop (+ (start-of-day y mo d) 86400) (add1 i))]
+         [(not (memv h (cron-hours c))) (loop (+ (start-of-day y mo d) (* 3600 (add1 h))) (add1 i))]
+         [(not (memv mi (cron-minutes c))) (loop (+ m 60) (add1 i))]
+         [else m])])))
+
+;; The last tick at or before t, or #f if none exists.
+(define (cron-prev c t)
+  (let loop ([m (* 60 (floor (/ t 60)))] [i 0])
+    (cond
+      [(> i search-limit) #f]
+      [else
+       (define-values (y mo d h mi s wd) (utc-fields m))
+       (cond
+         [(not (memv mo (cron-months c))) (loop (- (utc y mo 1) 60) (add1 i))]
+         [(not (cron-day-matches? c d wd)) (loop (- (start-of-day y mo d) 60) (add1 i))]
+         [(not (memv h (cron-hours c))) (loop (- (+ (start-of-day y mo d) (* 3600 h)) 60) (add1 i))]
+         [(not (memv mi (cron-minutes c))) (loop (- m 60) (add1 i))]
+         [else m])])))
+
+;; The ticks in (a, b], in order.
+(define (cron-ticks-between c a b)
+  (let loop ([t (cron-next c a)] [acc '()])
+    (if (and t (<= t b)) (loop (cron-next c t) (cons t acc)) (reverse acc))))
+
+(provide
+ (contract-out
+  [struct cron ([text string?] [minutes list?] [hours list?] [doms list?] [months list?] [dows list?]
+                [dom-any? boolean?] [dow-any? boolean?])]
+  [parse-cron (-> string? cron?)]
+  [cron-matches? (-> cron? real? boolean?)]
+  [cron-next (-> cron? real? (or/c #f real?))]
+  [cron-prev (-> cron? real? (or/c #f real?))]
+  [cron-ticks-between (-> cron? real? real? (listof real?))]))
