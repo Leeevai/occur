@@ -320,6 +320,13 @@
     (syntax-parse p
       [(h:id . rest) (cons (syntax-e #'h) (append-map pattern-heads (syntax->list #'rest)))]
       [_ '()]))
+  ;; the heads that can make a pattern's state unbounded: a trailing absence
+  ;; with its own bound does not
+  (define (unbounded-heads p)
+    (syntax-parse p
+      [((~datum absent) q #:within d) (unbounded-heads #'q)]
+      [(h:id . rest) (cons (syntax-e #'h) (append-map unbounded-heads (syntax->list #'rest)))]
+      [_ '()]))
   (define (warn! stx msg)
     (eprintf "~a:~a:~a: warning: ~a\n" (syntax-source stx) (syntax-line stx) (syntax-column stx) msg)))
 
@@ -384,7 +391,7 @@
                            "#:eval immediate is valid only for monotone patterns with every or first output (EVAL.immediate)"
                            stx (hash-ref opts '#:eval)))
      (define clock (and (hash-ref opts '#:clock #f) (check-clock! (hash-ref opts '#:clock))))
-     (when (and (ormap (λ (h) (memq h '(kleene+ kleene* repeat unless absent))) heads)
+     (when (and (ormap (λ (h) (memq h '(kleene+ kleene* repeat unless absent))) (unbounded-heads body))
                 (not (hash-ref opts '#:within #f))
                 (not (memq 'within heads)))
        (warn! stx (format "pattern ~a has negation or Kleene closure but no #:within; its state can grow without bound (spec §17)"

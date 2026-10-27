@@ -546,3 +546,9 @@
   (define r (side-output-run))
   (check-equal? (map event-id (by-node r 'on-time)) '("a" "b"))
   (check-equal? (map event-id (by-node r 'late-swipes)) '("late")))
+
+(spec-test 'PT.absence "a trailing absence with its own bound draws no unbounded-pattern warning"
+  (check-equal? (compile-warnings (string-append pat-header "(define-pattern p #:from feed (seq (a : Swipe) (absent Verified #:within 60)))\n"))
+                "")
+  (check-compile-error (string-append pat-header "(define-pattern p #:from feed #:eval\n immediate (seq (a : Swipe) (absent Verified #:within 60)))\n")
+                       #rx"valid only for monotone patterns" 6))
