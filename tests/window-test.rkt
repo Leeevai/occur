@@ -48,6 +48,9 @@
                         #:final? #f))
   (check-equal? (wins r) '((0 10 1) (10 20 0) (20 30 0) (30 40 1)))
   (check-equal? (event-constituents (second (run-result-events r))) '())
+  ;; at the end of the stream, empty windows after the last data do not fire
+  (define r3 (run-window op (list (arrive 1 'in (pt "a" 1)) (arrive 2 'in (pt "b" 35)))))
+  (check-equal? (wins r3) '((0 10 1) (10 20 0) (20 30 0) (30 40 1)))
   ;; without it, empty windows emit nothing
   (define r2 (run-window (grid-window-operator (tumbling 10) contents-accumulator)
                          (list (arrive 1 'in (pt "a" 1)) (arrive 2 'in (pt "b" 35)) (watermark-to 'in 40))

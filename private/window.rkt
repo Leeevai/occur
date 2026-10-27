@@ -9,6 +9,7 @@
 (require racket/contract
          racket/list
          racket/match
+         racket/math
          "time.rkt"
          "event.rkt"
          "operator.rkt"
@@ -117,11 +118,17 @@
   ;; Fire every window due at the limit W, then drop windows past lateness.
   (define (fire st c)
     (define W (limit-of c st))
+    ;; At the end of the stream (W = +∞), empty windows after the last data
+    ;; are not emitted: the walk stops at the end of the newest window.
+    (define walk-limit
+      (if (eqv? W +inf.0)
+          (for/fold ([m -inf.0]) ([w (in-hash-values (grid-state-windows st))]) (time-max m (win-end w)))
+          W))
     ;; empty grid windows, in order, from the first one not yet fired
     (define-values (ws1 next)
       (if (and fire-empty? (grid-state-next st))
           (let loop ([ws (grid-state-windows st)] [next (grid-state-next st)])
-            (cond [(<= (+ next size) W)
+            (cond [(<= (+ next size) walk-limit)
                    (define w (or (hash-ref ws next #f) (fresh-win next)))
                    (loop (hash-set ws next (if (win-fired w) w (emit-window! c w))) (+ next step))]
                   [else (values ws next)]))
@@ -133,7 +140,8 @@
     (define kept (for/hash ([(s w) (in-hash ws2)]
                             #:unless (and (win-fired w) (<= (+ (win-end w) lateness) W)))
                    (values s w)))
-    (struct-copy grid-state st [windows kept] [next next]))
+    ;; at the end of the stream no further empty windows fire
+    (struct-copy grid-state st [windows kept] [next (if (eqv? W +inf.0) #f next)]))
   (define (add-event st e c)
     (define starts (assign g e (if processing? 'arrival mode) (ctx-now c)))
     (define anchor (or (grid-state-anchor st) (and (pair? starts) (apply min starts))))
