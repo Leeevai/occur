@@ -17,6 +17,7 @@
                        "../private/window.rkt"
                        "../private/context.rkt"
                        "../private/aggregate.rkt"
+                       "../private/join.rkt"
                        "../private/dataflow.rkt"
                        "../private/operator.rkt"
                        "../private/ops/stateless.rkt"
@@ -752,3 +753,94 @@
    (define-values (acc fields) (aggregate-clauses stx stx ctx))
    (stage-out* #`(landmark-window-operator -inf.0 #,acc #:key #,(or (stage-ctx-key ctx) #'#f) #:type 'Aggregate)
                #f (shape (list (cons 'Aggregate fields))) (stage-ctx-key ctx))))
+
+;; ===========================================================================
+;; Joins (spec §9)
+;;
+;; (join other #:kind kind key-option option ...) joins the pipeline (left)
+;; with another stream (right). θ (#:on) and #:select see the attributes as
+;; left.attr and right.attr; an unmatched side reads as #f.
+
+(define (pair-lambda lshape rshape body #:lexical lexical)
+  (define l (car (generate-temporaries '(l))))
+  (define r (car (generate-temporaries '(r))))
+  (define (binds side ev shp)
+    (for/list ([a (shape-attributes shp)])
+      #`[#,(datum->syntax lexical (string->symbol (format "~a.~a" side a)))
+         (and #,ev (event-attr/default #,ev '#,a #f))]))
+  #`(λ (#,l #,r) (let (#,@(binds 'left l lshape) #,@(binds 'right r rshape)) #,body)))
+
+(register-stage!
+ 'join
+ (λ (stx ctx)
+   (define lshape (stage-ctx-shape ctx))
+   (syntax-parse stx
+     [(_ other:id
+         (~alt (~once (~seq #:kind (~and kind (~or* (~datum window) (~datum interval) (~datum table) (~datum as-of)))))
+               (~optional (~seq #:key k:id))
+               (~optional (~seq #:keys (lk:id rk:id)))
+               (~optional (~seq #:on θ:expr))
+               (~optional (~seq #:window w))
+               (~optional (~seq #:lower lo:expr))
+               (~optional (~seq #:upper hi:expr))
+               (~optional (~seq #:valid-from vf:expr))
+               (~optional (~seq #:outer (~and outer (~or* (~datum left) (~datum right) (~datum full)))))
+               (~optional (~seq #:type t:id))
+               (~optional (~seq #:select ([sa:id se:expr] ...))))
+         ...)
+      (define v (lookup-upstream #'other))
+      (define rshape (if (source-static? v) (apply type-shape (source-static-types v)) (stream-static-shape v)))
+      (define right-input (or (and (source-static? v) (source-static-head v)) (static-runtime-id v)))
+      (define kind* (syntax-e #'kind))
+      ;; the shared key
+      (define-values (la ra)
+        (cond [(attribute k) (values #'k #'k)]
+              [(attribute lk) (values #'lk #'rk)]
+              [else (raise-syntax-error 'join "give #:key attr, or #:keys (left-attr right-attr)" stx)]))
+      (check-attributes! 'join lshape #`(#,la) stx)
+      (check-attributes! 'join rshape #`(#,ra) stx)
+      (define left-types (shape-type-names lshape))
+      (define key-fn
+        (if (eq? (syntax-e la) (syntax-e ra))
+            #`(attribute-key-fn '#,la)
+            #`(λ (e) (if (memq (event-type e) '#,left-types) (event-attr e '#,la) (event-attr e '#,ra)))))
+      (define θ-fn (if (attribute θ) (pair-lambda lshape rshape #'θ #:lexical stx) #'(λ (l r) #t)))
+      (define type (if (attribute t) (syntax-e #'t) 'Joined))
+      (define combine
+        (if (attribute sa)
+            (pair-lambda lshape rshape #'(make-immutable-hasheq (list (cons 'sa se) ...)) #:lexical stx)
+            #'default-combine))
+      (define out-fields
+        (if (attribute sa)
+            (for/list ([a (syntax->list #'(sa ...))]) (cons (syntax-e a) 'Any))
+            (remove-duplicates (append (for*/list ([ty (shape-types lshape)] [f (cdr ty)]) f)
+                                       (for*/list ([ty (shape-types rshape)] [f (cdr ty)]) f))
+                               #:key car)))
+      (define outer* (if (attribute outer) #`'#,(syntax-e #'outer) #'#f))
+      (define common #`(#:key #,key-fn #:type '#,type #:combine #,combine))
+      (define lattrs #`'#,(shape-attributes lshape))
+      (define rattrs #`'#,(shape-attributes rshape))
+      (when (and (memq kind* '(table as-of)) (attribute outer) (not (eq? (syntax-e #'outer) 'left)))
+        (raise-syntax-error 'join "table and as-of joins support only #:outer left" stx #'outer))
+      (define op
+        (case kind*
+          [(window)
+           (unless (attribute w) (raise-syntax-error 'join "a window join needs #:window" stx))
+           (define g (syntax-parse #'w
+                       [((~datum tumbling) #:size d:expr) #'(tumbling d)]
+                       [((~datum sliding) #:size d:expr #:slide sl:expr) #'(sliding d sl)]
+                       [_ (raise-syntax-error 'join "expected (tumbling #:size d) or (sliding #:size d #:slide s)" stx #'w)]))
+           #`(window-join-operator #,g #,θ-fn #,@common #:outer #,outer*
+                                   #:left-attributes #,lattrs #:right-attributes #,rattrs)]
+          [(interval)
+           (unless (and (attribute lo) (attribute hi))
+             (raise-syntax-error 'join "an interval join needs #:lower and #:upper" stx))
+           #`(interval-join-operator #,(attribute lo) #,(attribute hi) #,θ-fn #,@common #:outer #,outer*
+                                     #:left-attributes #,lattrs #:right-attributes #,rattrs)]
+          [(table)
+           #`(table-join-operator #,@common #:outer #,outer* #:right-attributes #,rattrs)]
+          [(as-of)
+           #`(as-of-join-operator #,@common #:outer #,outer* #:right-attributes #,rattrs
+                                  #:valid-from #,(if (attribute vf) (event-lambda rshape #'vf) #'event-ts))]))
+      (stage-out* op (list (stage-ctx-prev ctx) right-input)
+                  (shape (list (cons type out-fields))) key-fn)])))

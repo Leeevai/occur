@@ -258,3 +258,26 @@
 (spec-test 'AG.count "unknown aggregates are compile-time errors"
   (check-compile-error (string-append header "(source feed #:types (Swipe))\n(define-stream s (from feed)\n (aggregate [x (sumx amount)]))\n")
                        #rx"unknown aggregate" 5))
+
+(require (only-in "lang/joins.rkt" [occur-run joins-run]))
+
+(spec-test '(JN.window JN.interval JN.outer JN.table JN.as-of) "join stages run as declared"
+  (define r (joins-run))
+  (check-equal? (map (λ (e) (list (event-attr e 'account) (event-attr e 'amount) (event-attr e 'paid)))
+                     (by-node r 'settled))
+                '(("a" 5 5)))
+  (check-equal? (map (λ (e) (event-payload e)) (by-node r 'nearby))
+                (list (hasheq 'account "a" 'gap 0) (hasheq 'account "a" 'gap -8)))
+  (check-equal? (map (λ (e) (list (event-type e) (event-attr e 'account) (event-attr e 'paid))) (by-node r 'unpaid))
+                ;; the order at 30 shares its window with the payment at 31, so only b is unpaid
+                '((Unpaid "a" 5) (Unpaid "a" 1) (Unpaid "b" #f)))
+  (check-equal? (map (λ (e) (event-attr e 'tier)) (by-node r 'with-tier)) '("gold" "platinum"))
+  (check-equal? (map (λ (e) (list (event-attr e 'account) (event-attr e 'tier))) (by-node r 'tier-then))
+                ;; the final step's outputs are grouped by key, b first (DR.ordered)
+                '(("b" #f) ("a" "gold") ("a" "platinum"))))
+
+(spec-test 'JN.window "join keys are checked against both sides"
+  (check-compile-error
+   (string-append header "(event-type P [card : String])\n(source a #:types (Swipe))\n(source b #:types (P))\n"
+                  "(define-stream s (from a)\n (join b #:kind table #:key amount))\n")
+   #rx"unknown attribute amount: P events carry" 7))
