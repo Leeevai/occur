@@ -17,3 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sample store; composite events; the inductive event space with abstraction
   levels; precedence, membership, and causality; streams, histories, keyed
   partitions, and sub-streams.
+- Language skeleton and runner (M2): the deadline min-heap; operators as
+  callbacks over immutable state; programs with a static cycle guard; the
+  deterministic scripted runner with a simulated processing clock,
+  event-time timers, watermarks, suspension, retraction propagation, and
+  ordered delivery; JSON Lines input; module registries; `#lang occur` with
+  `event-type`, `source`, `define-stream` (`from`), and `script`, and
+  compile-time schema checks with source locations; the first manual
+  sections.
