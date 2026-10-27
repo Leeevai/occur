@@ -111,3 +111,20 @@
                            (for/list ([e es] [i (in-naturals)]) (arrive i 'in e))))
      (check-equal? (apply + (map third (wins r))) (length es))
      (for ([w (wins r)]) (check-equal? (- (second w) (first w)) size)))))
+
+(spec-test 'WN.session "sessions are maximal runs with gaps below g; an arrival may merge two"
+  (define op (session-window-operator 10 contents-accumulator #:key (λ (e) 'user)))
+  (define r (run-window op (list (arrive 1 'in (pt "a" 0)) (arrive 2 'in (pt "b" 5))
+                                 (arrive 3 'in (pt "c" 30)) (arrive 4 'in (pt "d" 50)))))
+  (check-equal? (wins r) '((0 15 2) (30 40 1) (50 60 1)))
+  ;; an out-of-order event bridging two open sessions merges them
+  (define r2 (run-window op (list (arrive 1 'in (pt "a" 0)) (arrive 2 'in (pt "c" 16)) (arrive 3 'in (pt "b" 8)))))
+  (check-equal? (wins r2) '((0 26 3))))
+
+(spec-test 'WN.session "sessions fire when the watermark passes last + g"
+  (define op (session-window-operator 10 contents-accumulator))
+  (define r (run-window op (list (arrive 1 'in (pt "a" 0)) (arrive 2 'in (pt "b" 5)) (watermark-to 'in 15)
+                                 (arrive 3 'in (pt "c" 40)))
+                        #:final? #f))
+  (check-equal? (wins r) '((0 15 2)))
+  (check-equal? (map output-at (run-result-outputs r)) '(2)))

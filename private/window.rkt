@@ -196,3 +196,66 @@
                               #:closer any/c
                               #:type symbol?)
                              operator?)]))
+
+;; ===========================================================================
+;; WN.session: per key, maximal runs of events whose consecutive gaps are
+;; < g; the window is [first, last + g). An arriving event may merge two
+;; sessions. A session fires when the watermark reaches last + g; with
+;; allowed lateness, later merges are emitted as corrections.
+
+(struct session (first last acc contents fired) #:transparent)   ; fired: list of emitted events
+
+(define (session-window-operator gap acc #:key [key #f] #:lateness [lateness 0] #:type [type 'Window])
+  (define (end s) (+ (session-last s) gap))
+  (define (emit-session! c s)
+    (define out (window-output type (ctx-key c) (session-first s) (end s) acc (session-acc s)
+                               (reverse (session-contents s))))
+    (match (session-fired s)
+      ['() (emit! c out)]
+      [olds (for ([o (in-list olds)]) (emit! c (retraction o))) (emit! c out)])
+    (struct-copy session s [fired (list out)]))
+  (define (merge-sessions ss e)
+    (define fold-acc
+      (for/fold ([a ((accumulator-init acc))]) ([x (in-list (reverse (append* (map session-contents ss))))])
+        ((accumulator-add acc) a x)))
+    (session (apply time-min (event-ts e) (map session-first ss))
+             (apply time-max (event-ts e) (map session-last ss))
+             ((accumulator-add acc) fold-acc e)
+             (cons e (append* (map session-contents ss)))
+             (append* (map session-fired ss))))
+  (make-operator
+   'session-window
+   #:monotone? #f
+   #:key key
+   #:init-key (λ (gl k c) '())
+   #:on-event
+   (λ (gl ss e c)
+     (define t (event-ts e))
+     (define W (ctx-watermark c))
+     (define-values (touching others)
+       (partition (λ (s) (and (< (- (session-first s) gap) t) (< t (+ (session-last s) gap)))) ss))
+     (cond
+       [(and (null? touching) (<= (+ t gap lateness) W)) (count! c 'late) ss]
+       [(and (pair? touching) (andmap (λ (s) (pair? (session-fired s))) touching)
+             (<= (+ t gap lateness) W) (andmap (λ (s) (<= (+ (end s) lateness) W)) touching))
+        (count! c 'late) ss]
+       [else
+        (define merged (merge-sessions touching e))
+        (define merged* (if (pair? (session-fired merged)) (emit-session! c merged) merged))
+        (sort (cons merged* others) < #:key session-first)]))
+   #:event-deadline
+   (λ (ss) (define cands (for/list ([s ss]) (if (pair? (session-fired s)) (+ (end s) lateness) (end s))))
+     (and (pair? cands) (apply min cands)))
+   #:on-timer
+   (λ (gl ss c)
+     (define W (ctx-watermark c))
+     (define fired (for/list ([s (in-list ss)])
+                     (if (and (null? (session-fired s)) (<= (end s) W)) (emit-session! c s) s)))
+     (define kept (filter (λ (s) (not (and (pair? (session-fired s)) (<= (+ (end s) lateness) W)))) fired))
+     (and (pair? kept) kept))))
+
+(provide
+ (contract-out
+  [session-window-operator (->* ((and/c real? positive?) accumulator?)
+                                (#:key (or/c #f (-> event? any/c)) #:lateness duration? #:type symbol?)
+                                operator?)]))
