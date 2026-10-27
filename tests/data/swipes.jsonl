@@ -1,0 +1,5 @@
+{"type": "Swipe", "id": "e1", "t": 60, "card": "c1", "amount": 2}
+{"type": "Swipe", "id": "e2", "t": 120, "card": "c1", "amount": 600}
+
+{"type": "Verified", "t": "1970-01-01T00:03:30Z", "card": "c1", "at": 240}
+{"type": "Swipe", "ts": 230, "te": 240, "n": 3, "card": "c2", "amount": 9.5}
