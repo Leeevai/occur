@@ -38,9 +38,11 @@ with ¬Verified scoped to the gap and `unless Verified` over the span;
 trace B with no match under any strategy; engine and oracle agree.
 
 Notes:
-- Hosted CI runs are blocked by the account's GitHub billing; every commit
-  is verified locally (the commit helper stashes unstaged work and runs
-  `raco make -v main.rkt` and `raco test .` on the staged tree).
+- Hosted CI runs on every push (GitHub Actions, `.github/workflows/ci.yml`)
+  and is green on main; check it with `gh run list --limit 3` after
+  each milestone push. Every commit is also verified locally first (the
+  commit helper stashes unstaged work and runs `raco make -v main.rkt` and
+  `raco test .` on the staged tree; `scripts/ci-local.sh` mirrors CI).
 - Stage handlers register in `syntax/stages.rkt` with `register-stage!`.
 
 ## Spec IDs
