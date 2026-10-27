@@ -18,6 +18,8 @@
          "private/progress.rkt"
          "private/window.rkt"
          "private/context.rkt"
+         "private/aggregate.rkt"
+         "private/sketch.rkt"
          (only-in "private/scheduler.rkt"
                   cron cron? cron-text parse-cron cron-matches? cron-next cron-prev cron-ticks-between))
 (provide (all-from-out "private/time.rkt")
@@ -33,4 +35,6 @@
          (all-from-out "private/progress.rkt")
          (all-from-out "private/window.rkt")
          (all-from-out "private/context.rkt")
+         (all-from-out "private/aggregate.rkt")
+         (all-from-out "private/sketch.rkt")
          cron cron? cron-text parse-cron cron-matches? cron-next cron-prev cron-ticks-between)
