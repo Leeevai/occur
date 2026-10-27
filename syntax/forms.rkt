@@ -8,16 +8,19 @@
          "../private/io.rkt"
          "../private/registry.rkt"
          "../private/ops/structure.rkt"
+         "../private/progress.rkt"
          (for-syntax racket/base
                      racket/list
                      racket/syntax
                      syntax/parse
+                     (only-in "../private/scheduler.rkt" [parse-cron parse-cron*])
                      "static.rkt"
                      "stages.rkt"))
 
 (provide event-type
          source
          define-stream
+         define-schedule
          script
          jsonl events data)
 
@@ -49,7 +52,8 @@
     #:description "a watermark strategy: none, ascending, or (bounded-delay d)"
     (pattern (~datum none) #:with expr #''none)
     (pattern (~datum ascending) #:with expr #''ascending)
-    (pattern ((~datum bounded-delay) d:expr) #:with expr #'(list 'bounded-delay d))))
+    (pattern ((~datum bounded-delay) d:expr) #:with expr #'(list 'bounded-delay d))
+    (pattern ((~datum heartbeat) t:id) #:with expr #'(list 'heartbeat 't))))
 
 (define-syntax (jsonl stx) (raise-syntax-error #f "only allowed in a source's #:from" stx))
 (define-syntax (events stx) (raise-syntax-error #f "only allowed in a source's #:from" stx))
@@ -64,7 +68,8 @@
               (~optional (~seq #:key ent:id))
               (~optional (~seq #:substream sub:id))
               (~optional (~seq #:kind kind:id))
-              (~optional (~seq #:merge (~and merge (~datum high-water-mark)))))
+              (~optional (~seq #:merge (~and merge (~datum high-water-mark))))
+              (~optional (~seq #:skew-guard skew:expr)))
         ...)
      (define types (for/list ([t (syntax->list #'(t ...))]) (lookup-type t stx)))
      (define src-shape (apply type-shape types))
@@ -103,6 +108,7 @@
            #'#f))
      (with-syntax ([rt (format-id #'name "~a-source" #'name)]
                    [head (format-id #'name "~a-merged" #'name)]
+                   [guard (format-id #'name "~a-guarded" #'name)]
                    [data data-expr]
                    [wm (if (attribute wm) (attribute wm.expr) #''none)]
                    [keying keying]
@@ -113,13 +119,20 @@
        #`(begin
            (define rt (make-source 'name #:types (list t ...) #:watermark wm #:data data
                                    #:meta (hasheq 'keying 'keying)))
+           #,@(if (attribute skew)
+                  (list #`(define guard (make-node (string->symbol (format "~a/skew-guard" 'name))
+                                                   (skew-guard-operator #,(attribute skew)) (list rt))))
+                  '())
            #,@(if (attribute merge)
-                  (list #'(define head (make-node (string->symbol (format "~a/merge" 'name))
-                                                  (monotonic-merge-operator sub-fn) (list rt))))
+                  (list #`(define head (make-node (string->symbol (format "~a/merge" 'name))
+                                                  (monotonic-merge-operator sub-fn)
+                                                  (list #,(if (attribute skew) #'guard #'rt)))))
                   '())
            (define-syntax name (make-source-static 'name (list (syntax-local-value #'t) ...) (quote-syntax rt)
                                                    #:keying 'keying
-                                                   #:head #,(if (attribute merge) #'(quote-syntax head) #'#f)))
+                                                   #:head #,(cond [(attribute merge) #'(quote-syntax head)]
+                                                                  [(attribute skew) #'(quote-syntax guard)]
+                                                                  [else #'#f])))
            (registry-add-source! occur-registry rt)))]))
 
 ;; ---------------------------------------------------------------------------
@@ -161,3 +174,21 @@
     [(_ s ...)
      (with-syntax ([(st ...) (map step (syntax->list #'(s ...)))])
        #'(registry-set-script! occur-registry (list st ...)))]))
+
+;; ---------------------------------------------------------------------------
+;; (define-schedule name "cron expression")                       TM.schedule
+;; A stream of Tick events at every tick, in processing time, read in UTC.
+;; Ticks that came due together fire once with their count in `ticks`.
+
+(define-syntax (define-schedule stx)
+  (syntax-parse stx
+    [(_ name:id expr:str)
+     (with-handlers ([exn:fail? (λ (e) (raise-syntax-error #f (exn-message e) stx #'expr))])
+       (parse-cron* (syntax-e #'expr)))
+     (with-syntax ([rt (format-id #'name "~a-schedule" #'name)])
+       #'(begin
+           (define rt (make-node 'name (schedule-operator expr) '() #:sink? #t))
+           (define-syntax name (make-stream-static 'name (shape '((Tick (ticks . Integer) (first . Time)
+                                                                        (last . Time) (expr . String))))
+                                                   (quote-syntax rt)))
+           (registry-add-node! occur-registry rt)))]))

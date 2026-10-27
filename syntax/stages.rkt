@@ -12,6 +12,7 @@
          (for-template racket/base
                        "../private/event.rkt"
                        "../private/ops/structure.rkt"
+                       "../private/progress.rkt"
                        "../private/dataflow.rkt"
                        "../private/operator.rkt"
                        "../private/ops/stateless.rkt"
@@ -34,15 +35,19 @@
 ;; op: operator expression; inputs: list of input expressions (#f = prev)
 ;; extras: #f or (node-id -> list of definitions) spliced after the node
 ;; no-sink?: #t when the stream's own node must not be a sink (route)
-(struct stage-out (op inputs shape key [extras #:auto] [no-sink? #:auto] [keying #:auto])
+(struct stage-out (op inputs shape key [extras #:auto] [no-sink? #:auto] [keying #:auto]
+                      [last-only? #:auto])
   #:auto-value #f #:transparent #:mutable)
 
 ;; keying: 'same keeps the context's keying
-(define (stage-out* op inputs shape key #:extras [extras #f] #:sink? [sink? #t] #:keying [keying 'same])
+;; last-only?: the stage must end its stream (route)
+(define (stage-out* op inputs shape key #:extras [extras #f] #:sink? [sink? #t] #:keying [keying 'same]
+                    #:last-only? [last-only? #f])
   (define o (stage-out op inputs shape key))
   (set-stage-out-extras! o extras)
   (set-stage-out-no-sink?! o (not sink?))
   (set-stage-out-keying! o keying)
+  (set-stage-out-last-only?! o last-only?)
   o)
 
 (define stage-table (make-hasheq))
@@ -75,7 +80,7 @@
       #`(define #,node-id
           (make-node '#,node-name #,(stage-out-op out) (list #,@inputs) #:sink? #,sink?)))
     (define extras (if (stage-out-extras out) ((stage-out-extras out) node-id) '()))
-    (when (and (stage-out-extras out) (not last?))
+    (when (and (stage-out-last-only? out) (not last?))
       (raise-syntax-error 'define-stream "this stage must be the last stage of a stream" stg))
     (define keying (let ([k (stage-out-keying out)]) (if (or (eq? k 'same) (not k)) (if (eq? k 'same) (stage-ctx-keying ctx) #f) k)))
     (define ctx2 (stage-ctx name node-id (stage-out-shape out) (stage-out-key out) keying))
@@ -277,6 +282,18 @@
                                        #:lexical stx))
                     #f (type-shape ty) (stage-ctx-key ctx)))])))
 
+;; A stream of its own reading output `port` of `node-id`.
+(define (side-stream-definition br node-id port shp ctx)
+  (define br-node (car (generate-temporaries (list br))))
+  #`(begin
+      (define #,br-node
+        (make-node '#,br (make-operator '#,br) (list (cons #,node-id #,port)) #:sink? #t))
+      (define-syntax #,br (make-stream-static '#,br (shape '#,(shape-types shp))
+                                              (quote-syntax #,br-node)
+                                              #:key (quote-syntax #,(stage-ctx-key ctx))
+                                              #:keying '#,(stage-ctx-keying ctx)))
+      (registry-add-node! occur-registry #,br-node)))
+
 ;; ---------------------------------------------------------------------------
 ;; (route maybe-mode [branch pred] ... maybe-otherwise)              OP.route
 ;; The last stage; each branch becomes a stream of its own.
@@ -295,18 +312,11 @@
                                     #:otherwise? #,(and (attribute other) #t))
                   #f shp (stage-ctx-key ctx)
                   #:sink? #f
+                  #:last-only? #t
                   #:extras
                   (λ (node-id)
                     (for/list ([br branches] [port (in-naturals)])
-                      (define br-node (car (generate-temporaries (list br))))
-                      #`(begin
-                          (define #,br-node
-                            (make-node '#,br (make-operator '#,br) (list (cons #,node-id #,port)) #:sink? #t))
-                          (define-syntax #,br (make-stream-static '#,br (shape '#,(shape-types shp))
-                                                                  (quote-syntax #,br-node)
-                                                                  #:key (quote-syntax #,(stage-ctx-key ctx))
-                                                                  #:keying '#,(stage-ctx-keying ctx)))
-                          (registry-add-node! occur-registry #,br-node)))))])))
+                      (side-stream-definition br node-id port shp ctx))))])))
 
 ;; ---------------------------------------------------------------------------
 ;; (merge stream ...+): as the first stage, the union of the streams; later,
@@ -419,3 +429,75 @@
       (out #`(list 'rate r d '#,clock))]
      [(_ #:every n:expr) (out #'(list 'every n))]
      [(_ #:probability p:expr #:seed s:expr) (out #'(list 'probability p s))])))
+
+;; ===========================================================================
+;; Time and progress (spec §6)
+
+;; (skew-guard bound)                                           TM.skew-guard
+(register-stage!
+ 'skew-guard
+ (λ (stx ctx)
+   (syntax-parse stx
+     [(_ b:expr)
+      (stage-out* #'(skew-guard-operator b) #f (stage-ctx-shape ctx) (stage-ctx-key ctx))])))
+
+;; (lateness #:policy drop | side | (allow L) maybe-side-output)    TM.lateness
+(register-stage!
+ 'lateness
+ (λ (stx ctx)
+   (define shp (stage-ctx-shape ctx))
+   (syntax-parse stx
+     [(_ #:policy (~or* (~and p (~datum drop)) (~and p (~datum side)) ((~and p (~datum allow)) l:expr))
+         (~optional (~seq #:side-output side-name:id)))
+      (define policy (case (syntax-e #'p) [(drop) #''drop] [(side) #''side] [else #'(list 'allow l)]))
+      (when (and (attribute side-name) (not (eq? (syntax-e #'p) 'side)))
+        (raise-syntax-error 'lateness "#:side-output needs #:policy side" stx #'side-name))
+      (stage-out* #`(lateness-operator #,policy) #f shp (stage-ctx-key ctx)
+                  #:extras (and (attribute side-name)
+                                (λ (node-id) (list (side-stream-definition #'side-name node-id 1 shp ctx)))))])))
+
+;; (delay d maybe-clock)                                    TM.timer
+(register-stage!
+ 'delay
+ (λ (stx ctx)
+   (syntax-parse stx
+     [(_ d:expr (~optional (~seq #:clock clk:id)))
+      (define clock (stage-clock stx (attribute clk) '(event-time processing-time)))
+      (stage-out* #`(delay-operator d #:clock '#,clock #:key #,(or (stage-ctx-key ctx) #'#f))
+                  #f (stage-ctx-shape ctx) (stage-ctx-key ctx))])))
+
+;; (keyed-watermark maybe-kinds maybe-mode): a stream of Progress events,
+;; one whenever a key's data-driven watermark advances.     TM.keyed-watermark
+(define progress-shape
+  (shape '((Progress (key . Any) (watermark . Time) (mode . Any)))))
+
+(register-stage!
+ 'keyed-watermark
+ (λ (stx ctx)
+   (define ky (stage-ctx-keying ctx))
+   (syntax-parse stx
+     [(_ (~alt (~optional (~seq #:kinds (k ...)))
+               (~optional (~seq #:mode (~and m (~or* (~datum any) (~datum all))))))
+         ...)
+      (unless (stage-ctx-key ctx)
+        (raise-syntax-error 'keyed-watermark "needs a keyed stream: add (key-by attr) or a source #:key" stx))
+      (define kind (and ky (hash-ref ky 'kind #f)))
+      (unless kind
+        (raise-syntax-error 'keyed-watermark "needs the source's #:kind to tell kinds apart" stx))
+      (stage-out* #`(keyed-watermark-operator #:key #,(stage-ctx-key ctx) #:kind (attribute-key-fn '#,kind)
+                                              #:kinds #,(if (attribute k) #'(list 'k ...) #'#f)
+                                              #:mode '#,(if (attribute m) (syntax-e #'m) 'all)
+                                              #:pass-through? #f)
+                  #f progress-shape (stage-ctx-key ctx))])))
+
+;; (idle d maybe-clock): one Idle event per key after d without data.  TM.idle
+(define idle-shape (shape '((Idle (key . Any) (since . Time) (after . Duration)))))
+
+(register-stage!
+ 'idle
+ (λ (stx ctx)
+   (syntax-parse stx
+     [(_ d:expr (~optional (~seq #:clock clk:id)))
+      (define clock (if (attribute clk) (check-clock! #'clk '(processing-time hybrid)) 'processing-time))
+      (stage-out* #`(idle-operator d #:clock '#,clock #:key #,(or (stage-ctx-key ctx) #'#f))
+                  #f idle-shape (stage-ctx-key ctx))])))

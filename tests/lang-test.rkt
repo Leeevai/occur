@@ -168,3 +168,23 @@
                        #rx"unknown attribute owner" 4)
   (check-compile-error "#lang occur\n(event-type P [id : String])\n(source s #:types (P) #:key id\n #:merge high-water-mark)\n"
                        #rx"needs #:substream" 4))
+
+(require (only-in "lang/progress.rkt" [occur-run progress-run]))
+
+(spec-test '(TM.keyed-watermark TM.skew-guard TM.lateness TM.timer TM.idle TM.schedule TM.watermark)
+           "time and progress forms run as declared"
+  (define r (progress-run))
+  (check-equal? (map (λ (e) (event-attr e 'watermark)) (by-node r 'progress)) '(50 70))
+  (check-equal? (run-result-counter r 'arrivals/skew-guard 'future-skew) 1)
+  (check-equal? (map (λ (e) (event-attr e 'card)) (by-node r 'on-time)) '("a"))
+  (check-equal? (map (λ (e) (event-attr e 'card)) (by-node r 'late-swipes)) '("late"))
+  ;; the heartbeat moved W to 100, which released a (10 + 5); the late swipe's
+  ;; timer (40 + 5) is already behind the watermark, so it fires on arrival
+  (check-equal? (map (λ (o) (list (output-at o) (event-attr (output-item o) 'card)))
+                     (filter (λ (o) (eq? (output-node o) 'delayed)) (run-result-outputs r)))
+                '((20 "a") (30 "late")))
+  (check-equal? (map output-at (filter (λ (o) (eq? (output-node o) 'quiet)) (run-result-outputs r))) '(602))
+  (check-equal? (map (λ (e) (event-attr e 'ticks)) (by-node r 'hourly)) '(1)))
+
+(spec-test 'TM.schedule "a malformed cron expression is a compile-time error"
+  (check-compile-error "#lang occur\n(define-schedule s\n \"0 25 * * *\")\n" #rx"out of range" 3))
