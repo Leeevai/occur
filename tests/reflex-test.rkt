@@ -62,3 +62,13 @@
                   (5 window (120 240) 170 2 #hasheq())))
   ;; under mode any, [0, 60] closes at step 2, because W_any = 70 there
   (check-equal? (car (triggers-for r "any-kind-job")) '(2 window (0 60) 120 1 #hasheq())))
+
+(require (prefix-in r4: "../examples/reflex/r4-silence.rkt"))
+
+(spec-test '(PT.silence PT.recovery PT.activation OUT.edge CX.activation TM.idle TM.clock)
+           "trace R4: silence counted from activation, with recovery, edge-triggered on the hybrid clock"
+  (check-equal? (map (λ (t) (take t 3)) (triggers (r4:occur-run)))
+                '((600 silence (none 600))
+                  (900 recovered (none 890))
+                  (1490 silence (890 1490))
+                  (1600 recovered (890 1600)))))
