@@ -23,22 +23,21 @@ This file is the resume point for work on occur. Read it, together with
 | M14 | Rules as data | §14 | done |
 | M15 | Checkpoint, restore, and replay | §6 | done |
 | M16 | Acceptance: card testing | §15 | done |
-| M17 | Acceptance: Reflex | §16 | todo |
+| M17 | Acceptance: Reflex | §16 | done |
 | M18 | Examples, Scribble docs, README, full coverage | all | todo |
 | M19 | Release v0.1.0 | all | todo |
 
 ## Next step
 
-M17: Reflex as `lib/reflex.rkt`, written in `#lang occur` with public
-forms only (`tests/reflex-purity.rkt` rejects any `private/` require):
-the DataArrival normalization of §16.1 (split per sensor, key by owning
-device, sensors as sub-streams and types as kinds, skew guard, device
-directory, high-water-mark merge), the four conditions of §16.2 as named
-conditions with Reflex's parameter names, a rule template form mapping
-`max_delay`, `reset_on_max_delay`, `min_interval`, and `on_update`, the
-trigger output of §16.3, and the fleet health view; `examples/reflex/`
-with rule sources and traces R1 to R6 as data; one test commit per trace;
-`docs/reflex.md` realizing §16.6 row by row.
+M18: examples for fraud (beyond §15), IoT telemetry, and logistics
+geofencing, chosen so that every spec ID still `partial` in
+`docs/coverage.md` gets an example; complete Scribble docs (unique tags
+for the per-chapter Runtime sections, no broken cross references); the
+full README (quick start with `raco pkg install`, an annotated example,
+the algebra with LaTeX, many examples, links to `docs/spec.md`,
+`docs/coverage.md`, `docs/reflex.md`, and the manual); then every row
+`done` and `docs/.coverage-complete`, which turns on the strict coverage
+check.
 
 Notes:
 - Hosted CI runs on every push (GitHub Actions, `.github/workflows/ci.yml`)
