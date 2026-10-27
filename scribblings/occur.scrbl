@@ -31,3 +31,4 @@ time.
 @include-section["runner.scrbl"]
 @include-section["operations.scrbl"]
 @include-section["structure.scrbl"]
+@include-section["progress.scrbl"]
