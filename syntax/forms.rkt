@@ -9,6 +9,7 @@
          "../private/registry.rkt"
          "../private/ops/structure.rkt"
          "../private/progress.rkt"
+         "../private/context.rkt"
          (for-syntax racket/base
                      racket/list
                      racket/syntax
@@ -18,6 +19,8 @@
                      "stages.rkt"))
 
 (provide event-type
+         directory
+         entries
          source
          define-stream
          define-schedule
@@ -69,7 +72,8 @@
               (~optional (~seq #:substream sub:id))
               (~optional (~seq #:kind kind:id))
               (~optional (~seq #:merge (~and merge (~datum high-water-mark))))
-              (~optional (~seq #:skew-guard skew:expr)))
+              (~optional (~seq #:skew-guard skew:expr))
+              (~optional (~seq #:directory dir:id)))
         ...)
      (define types (for/list ([t (syntax->list #'(t ...))]) (lookup-type t stx)))
      (define src-shape (apply type-shape types))
@@ -81,6 +85,10 @@
          (values k (syntax-e a))))
      (when (and (attribute merge) (not (attribute sub)))
        (raise-syntax-error 'source "#:merge high-water-mark needs #:substream" stx (attribute merge)))
+     (when (attribute dir)
+       (unless (attribute ent) (raise-syntax-error 'source "#:directory needs #:key" stx #'dir))
+       (unless (directory-static? (lookup-static #'dir))
+         (raise-syntax-error 'source "not a declared directory" stx #'dir)))
      (define type-names (map type-static-name types))
      (define data-expr
        (if (attribute from)
@@ -109,6 +117,7 @@
      (with-syntax ([rt (format-id #'name "~a-source" #'name)]
                    [head (format-id #'name "~a-merged" #'name)]
                    [guard (format-id #'name "~a-guarded" #'name)]
+                   [gate (format-id #'name "~a-gated" #'name)]
                    [data data-expr]
                    [wm (if (attribute wm) (attribute wm.expr) #''none)]
                    [keying keying]
@@ -123,14 +132,24 @@
                   (list #`(define guard (make-node (string->symbol (format "~a/skew-guard" 'name))
                                                    (skew-guard-operator #,(attribute skew)) (list rt))))
                   '())
+           #,@(if (attribute dir)
+                  (list #`(define gate (make-node (string->symbol (format "~a/directory" 'name))
+                                                  (entity-context-operator
+                                                   '#,(directory-static-name (lookup-static #'dir))
+                                                   #:key (attribute-key-fn '#,(attribute ent)))
+                                                  (list #,(if (attribute skew) #'guard #'rt)))))
+                  '())
            #,@(if (attribute merge)
                   (list #`(define head (make-node (string->symbol (format "~a/merge" 'name))
                                                   (monotonic-merge-operator sub-fn)
-                                                  (list #,(if (attribute skew) #'guard #'rt)))))
+                                                  (list #,(cond [(attribute dir) #'gate]
+                                                                [(attribute skew) #'guard]
+                                                                [else #'rt])))))
                   '())
            (define-syntax name (make-source-static 'name (list (syntax-local-value #'t) ...) (quote-syntax rt)
                                                    #:keying 'keying
                                                    #:head #,(cond [(attribute merge) #'(quote-syntax head)]
+                                                                  [(attribute dir) #'(quote-syntax gate)]
                                                                   [(attribute skew) #'(quote-syntax guard)]
                                                                   [else #'#f])))
            (registry-add-source! occur-registry rt)))]))
@@ -192,3 +211,29 @@
                                                                         (last . Time) (expr . String))))
                                                    (quote-syntax rt)))
            (registry-add-node! occur-registry rt)))]))
+
+;; ---------------------------------------------------------------------------
+;; (directory name #:from data)                                       CX.entity
+;; data: (jsonl path) with {"id": .., "status": ..} lines, (entries [id status] ...),
+;; or (data expr) producing a list of (id . status). The directory is pushed
+;; when the run starts; scripts push replacements or patches with
+;; (directory-push name entries #:mode replace | patch).
+
+(define-syntax (entries stx) (raise-syntax-error #f "only allowed in a directory's #:from" stx))
+
+(define-syntax (directory stx)
+  (syntax-parse stx
+    [(_ name:id #:from from)
+     (define loader
+       (syntax-parse #'from
+         [((~literal jsonl) path:str)
+          #'(λ () (read-jsonl-directory
+                   (module-relative-path (variable-reference->module-source (#%variable-reference)) path)))]
+         [((~literal entries) [id:expr status:id] ...) #'(λ () (list (cons id 'status) ...))]
+         [((~literal data) e:expr) #'(λ () e)]
+         [_ (raise-syntax-error 'directory "expected (jsonl path), (entries [id status] ...), or (data expr)" #'from)]))
+     (with-syntax ([rt (format-id #'name "~a-directory" #'name)] [loader loader])
+       #'(begin
+           (define rt (directory-decl 'name loader))
+           (define-syntax name (directory-static 'name (quote-syntax rt)))
+           (registry-add-setup! occur-registry (list (directory-push 'name (directory-entries rt))))))]))

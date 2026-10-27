@@ -11,7 +11,8 @@
                        "../private/event.rkt"
                        "../private/io.rkt"))
 
-(provide make-source-static
+(provide (struct-out directory-static)
+         make-source-static
          make-stream-static
          clock-name?
          check-clock!
@@ -200,3 +201,13 @@
   (unless (and (identifier? id) (memq (syntax-e id) allowed))
     (raise-syntax-error #f (format "unknown clock; expected one of ~a" allowed) id))
   (syntax-e id))
+
+;; ---------------------------------------------------------------------------
+;; Directories (CX.entity)
+
+(struct directory-static (name runtime-id)
+  #:property prop:procedure
+  (λ (self stx)
+    (syntax-case stx ()
+      [id (identifier? #'id) (directory-static-runtime-id self)]
+      [_ (raise-syntax-error #f "a directory is not a procedure" stx)])))

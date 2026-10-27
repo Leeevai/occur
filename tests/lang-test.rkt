@@ -196,3 +196,40 @@
   (check-equal? (length items) 3)
   (check-true (retraction? (third items)))
   (check-equal? (event-attr (retraction-event (third items)) 'card) "c1"))
+
+(require (only-in "lang/windows.rkt" [occur-run windows-run]))
+
+(define (spans r node) (map (λ (e) (list (event-ts e) (event-te e) (event-attr e 'count))) (by-node r node)))
+
+(spec-test '(WN.tumbling WN.sliding WN.session WN.count WN.landmark WN.punctuated WN.since-last WN.empty)
+           "window stages run as declared"
+  (define r (windows-run))
+  (check-equal? (spans r 'per-10) '((0 10 2) (10 20 1) (30 40 3)))
+  (check-equal? (take (spans r 'every-5) 3) '((-5 5 1) (0 10 2) (5 15 2)))
+  (check-equal? (map (λ (e) (list (event-attr e 'key) (event-ts e) (event-te e))) (by-node r 'sessions))
+                ;; delivered grouped by key within the final step (DR.ordered)
+                '(("c1" 1 15) ("c1" 31 45) ("c2" 12 22)))
+  (check-equal? (spans r 'last-3) '((1 12 3) (31 35 3)))
+  (check-equal? (length (by-node r 'since-zero)) 6)
+  (check-equal? (map (λ (e) (list (event-ts e) (event-te e) (event-attr e 'reason))) (by-node r 'shifts))
+                '((31 35 closed)))
+  (check-equal? (spans r 'batches) '((1 5 2) (12 31 2) (33 35 2)))
+  (check-equal? (spans r 'empties) '((0 10 2) (10 20 1) (20 30 0) (30 40 3))))
+
+(spec-test '(CX.entity CX.activation CX.spatial CX.composite CX.state CX.segmentation CX.temporal)
+           "context stages and directories run as declared"
+  (define r (windows-run))
+  (check-equal? (map (λ (e) (event-attr e 'device)) (by-node r 'seen)) '("d1"))
+  (check-equal? (run-result-counter r 'readings/directory 'ignored) 1)
+  (check-equal? (map (λ (e) (event-attr e 'key)) (by-node r 'activated)) '("d1"))
+  (check-equal? (map (λ (e) (event-attr e 'device)) (by-node r 'near-depot)) '("d1"))
+  (check-equal? (event-attr (car (by-node r 'by-hour)) 'context) '((segment "c1") (sliding 0 3600)))
+  (check-equal? (map event-ts (by-node r 'during)) '(12)))
+
+(spec-test 'WN.calendar "calendar windows check their cron expression at compile time"
+  (check-compile-error (string-append header "(source feed #:types (Swipe))\n(define-stream s (from feed)\n (window (calendar \"0 0 * * 9\")))\n")
+                       #rx"out of range" 5))
+
+(spec-test 'CX.entity "#:directory needs a declared directory and a #:key"
+  (check-compile-error (string-append header "(source feed #:types (Swipe) #:key card\n #:directory nope)\n")
+                       #rx"not a declared directory" 4))

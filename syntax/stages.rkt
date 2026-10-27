@@ -9,10 +9,13 @@
 (require racket/list
          syntax/parse
          "static.rkt"
+         (only-in "../private/scheduler.rkt" [parse-cron parse-cron-at-phase-1])
          (for-template racket/base
                        "../private/event.rkt"
                        "../private/ops/structure.rkt"
                        "../private/progress.rkt"
+                       "../private/window.rkt"
+                       "../private/context.rkt"
                        "../private/dataflow.rkt"
                        "../private/operator.rkt"
                        "../private/ops/stateless.rkt"
@@ -20,6 +23,8 @@
                        "registry-param.rkt"))
 
 (provide stage-out*
+         window-spec->operator
+         default-window-fields
          (struct-out stage-ctx)
          (struct-out stage-out)
          register-stage!
@@ -501,3 +506,157 @@
       (define clock (if (attribute clk) (check-clock! #'clk '(processing-time hybrid)) 'processing-time))
       (stage-out* #`(idle-operator d #:clock '#,clock #:key #,(or (stage-ctx-key ctx) #'#f))
                   #f idle-shape (stage-ctx-key ctx))])))
+
+;; ===========================================================================
+;; Windows (spec §7)
+;;
+;; (window spec option ...) emits one Window event per (key, window) with the
+;; window's contents as constituents. Followed directly by (aggregate ...),
+;; the two stages fuse into one windowed aggregation (§8).
+
+(define default-window-fields '((count . Integer) (events . Integer) (key . Any)))
+
+(define (window-shape type fields) (shape (list (cons type fields))))
+
+;; Bind the fields of an accumulator result as variables around `body`.
+(define (result-lambda fields body #:lexical lexical)
+  (define r (car (generate-temporaries '(r))))
+  #`(λ (#,r) (let (#,@(for/list ([f fields])
+                         #`[#,(datum->syntax lexical (car f)) (hash-ref #,r '#,(car f) #f)]))
+               #,body)))
+
+;; window-spec->operator : spec-stx option-stx ctx acc-expr fields
+;;                         -> (values operator-expr shape)
+(define (window-spec->operator stx spec opts ctx acc fields)
+  (define shp (stage-ctx-shape ctx))
+  (define key (or (stage-ctx-key ctx) #'#f))
+  (define-values (lateness fire-empty assign clock wm type)
+    (syntax-parse opts
+      [((~alt (~optional (~seq #:lateness l:expr))
+              (~optional (~and fe #:fire-empty))
+              (~optional (~seq #:assign (~and a (~or* (~datum start) (~datum end) (~datum overlap)))))
+              (~optional (~seq #:clock clk:id))
+              (~optional (~seq #:watermark ((~datum keyed) (~and m (~or* (~datum any) (~datum all)))
+                                            (~optional (~seq #:kinds (k ...))))))
+              (~optional (~seq #:type t:id)))
+        ...)
+       (values (or (attribute l) #'0)
+               (and (attribute fe) #t)
+               (if (attribute a) (syntax-e #'a) 'start)
+               (if (attribute clk) (check-clock! #'clk '(event-time processing-time)) 'event-time)
+               (and (attribute m) (list (syntax-e #'m) (if (attribute k) #'(list k ...) #'#f)))
+               (if (attribute t) (syntax-e #'t) 'Window))]))
+  (define closer
+    (cond
+      [wm
+       (define ky (stage-ctx-keying ctx))
+       (define kind (and ky (hash-ref ky 'kind #f)))
+       (unless (and kind (stage-ctx-key ctx))
+         (raise-syntax-error 'window "a keyed watermark needs a keyed source with #:kind" stx))
+       #`(list 'keyed '#,(car wm) #,(cadr wm) (attribute-key-fn '#,kind))]
+      [(eq? clock 'processing-time) #''clock]
+      [else #''watermark]))
+  (define extra-fields '())
+  (define op
+    (syntax-parse spec
+      [((~datum tumbling) #:size d:expr (~optional (~seq #:offset o:expr)))
+       #`(grid-window-operator (tumbling d #:offset #,(or (attribute o) #'0)) #,acc
+                               #:key #,key #:assign '#,assign #:lateness #,lateness
+                               #:fire-empty? #,fire-empty #:closer #,closer #:type '#,type)]
+      [((~datum sliding) (~alt (~once (~seq #:size d:expr)) (~once (~seq #:slide sl:expr))
+                               (~optional (~seq #:offset o:expr))) ...)
+       #`(grid-window-operator (sliding d sl #:offset #,(or (attribute o) #'0)) #,acc
+                               #:key #,key #:assign '#,assign #:lateness #,lateness
+                               #:fire-empty? #,fire-empty #:closer #,closer #:type '#,type)]
+      [((~datum session) #:gap g:expr)
+       #`(session-window-operator g #,acc #:key #,key #:lateness #,lateness #:type '#,type)]
+      [((~datum count) #:size n:expr (~optional (~seq #:step m:expr)))
+       #`(count-window-operator n #,(or (attribute m) #'n) #,acc #:key #,key #:type '#,type)]
+      [((~datum landmark) #:from t0:expr)
+       #`(landmark-window-operator t0 #,acc #:key #,key #:type '#,type)]
+      [((~datum punctuated) (~alt (~once (~seq #:open o:expr)) (~once (~seq #:close c:expr))
+                                  (~optional (~seq #:timeout d:expr)) (~optional (~seq #:clock tc:id)))
+                            ...)
+       (set! extra-fields '((reason . Any)))
+       (define tclock (if (attribute tc) (check-clock! #'tc '(event-time processing-time)) 'event-time))
+       #`(punctuated-window-operator #,(event-lambda shp #'o) #,(event-lambda shp #'c) #,acc
+                                     #:key #,key #:timeout #,(or (attribute d) #'#f)
+                                     #:timeout-clock '#,tclock #:type '#,type)]
+      [((~datum since-last) #:when w:expr)
+       #`(since-last-window-operator #,(result-lambda fields #'w #:lexical stx) #,acc #:key #,key #:type '#,type)]
+      [((~datum calendar) e:str (~optional (~seq #:clock cc:id)))
+       (with-handlers ([exn:fail? (λ (x) (raise-syntax-error 'window (exn-message x) spec #'e))])
+         (parse-cron-at-phase-1 (syntax-e #'e)))
+       (set! extra-fields '((windows . Integer)))
+       (define cclock (if (attribute cc) (check-clock! #'cc '(event-time processing-time)) 'processing-time))
+       #`(calendar-window-operator e #,acc #:clock '#,cclock #:key #,key #:type '#,type)]
+      [_ (raise-syntax-error 'window
+                             "expected (tumbling ...), (sliding ...), (session ...), (count ...), (landmark ...), (punctuated ...), (since-last ...), or (calendar ...)"
+                             stx spec)]))
+  (values op (window-shape type (append fields extra-fields))))
+
+(register-stage!
+ 'window
+ (λ (stx ctx)
+   (syntax-parse stx
+     [(_ spec opt ...)
+      (define-values (op shp)
+        (window-spec->operator stx #'spec #'(opt ...) ctx #'contents-accumulator default-window-fields))
+      (stage-out* op #f shp (stage-ctx-key ctx))])))
+
+;; ===========================================================================
+;; Contexts (spec §7)
+
+(define (context-assigner stx spec ctx)
+  (define shp (stage-ctx-shape ctx))
+  (syntax-parse spec
+    [((~datum fixed-interval) #:from a:expr #:to b:expr) #'(fixed-interval-context a b)]
+    [((~datum event-interval) (~alt (~once (~seq #:open o:expr)) (~once (~seq #:close c:expr))
+                                    (~optional (~seq #:timeout d:expr))) ...)
+     #`(event-interval-context #,(event-lambda shp #'o) #,(event-lambda shp #'c) #:timeout #,(or (attribute d) #'#f))]
+    [((~datum sliding-interval) #:size d:expr #:slide s:expr) #'(sliding-interval-context d s)]
+    [((~datum sliding-event-interval) #:open o:expr #:duration d:expr)
+     #`(sliding-event-interval-context #,(event-lambda shp #'o) d)]
+    [((~datum segment) a:id ...+)
+     (check-attributes! 'context shp #'(a ...) stx)
+     #'(segmentation-context '(a ...))]
+    [((~datum near) (~alt (~once (~seq #:location l:expr)) (~once (~seq #:radius r:expr))
+                          (~optional (~seq #:attr at:id))) ...)
+     #`(fixed-location-context l r #:location '#,(or (attribute at) #'location))]
+    [((~datum near-entity) (~alt (~once (~seq #:locate f:expr)) (~once (~seq #:entities es:expr))
+                                 (~once (~seq #:radius r:expr)) (~optional (~seq #:attr at:id))) ...)
+     #`(entity-distance-context f es r #:location '#,(or (attribute at) #'location))]
+    [((~datum near-event) (~alt (~once (~seq #:anchor a:expr)) (~once (~seq #:radius r:expr))
+                                (~once (~seq #:duration d:expr)) (~optional (~seq #:attr at:id))) ...)
+     #`(event-distance-context #,(event-lambda shp #'a) r d #:location '#,(or (attribute at) #'location))]
+    [((~datum and) part ...+)
+     #`(composite-context #,@(for/list ([p (syntax->list #'(part ...))]) (context-assigner stx p ctx)))]
+    [_ (raise-syntax-error 'context "unknown context" stx spec)]))
+
+(register-stage!
+ 'context
+ (λ (stx ctx)
+   (define shp (stage-ctx-shape ctx))
+   (define key (stage-ctx-key ctx))
+   (define tagged (shape-with-fields shp '((context . Any))))
+   (syntax-parse stx
+     [(_ ((~datum state) #:from up:id #:active a:expr))
+      (define v (lookup-upstream #'up))
+      (define up-shape (if (source-static? v) (apply type-shape (source-static-types v)) (stream-static-shape v)))
+      (stage-out* #`(state-context-operator #,(event-lambda up-shape #'a))
+                  (list (stage-ctx-prev ctx) (or (and (source-static? v) (source-static-head v)) (static-runtime-id v)))
+                  tagged key)]
+     [(_ ((~datum entity) dir:id))
+      (unless key (raise-syntax-error 'context "the entity context needs a keyed stream" stx))
+      (define d (lookup-static #'dir))
+      (unless (directory-static? d) (raise-syntax-error 'context "not a declared directory" stx #'dir))
+      (stage-out* #`(entity-context-operator '#,(directory-static-name d) #:key #,key) #f shp key)]
+     [(_ spec)
+      (stage-out* #`(context-operator #,(context-assigner stx #'spec ctx)) #f tagged key)])))
+
+;; (activations): the activation instants of the stream's entities.  CX.activation
+(register-stage!
+ 'activations
+ (λ (stx ctx)
+   (syntax-parse stx
+     [(_) (stage-out* #'activations-operator #f (shape '((Activated (key . Any)))) (stage-ctx-key ctx))])))
