@@ -293,3 +293,43 @@
  p:where?
  (λ (ctx p denote)
    (filter (λ (m) ((p:where-pred p) (pmatch-bindings m))) (denote (p:where-body p)))))
+
+;; ===========================================================================
+;; PT.aperiodic, PT.aperiodic-cumulative. An interval is opened by
+;; e₁ ∈ ⟦P₁⟧ and closed by the first subsequent e₃ ∈ ⟦P₃⟧ (ts(e₃) > te(e₁));
+;; without such an e₃ it stays open.
+;;   APER:  every e₂ ∈ ⟦P₂⟧ strictly inside yields the match {e₁, e₂}.
+;;   APER*: when e₃ closes, one match {e₁, e₃} ∪ { every e₂ inside }.
+;; Among closers with the same start, the earliest ending, then earliest
+;; arriving, closes (decision 0010).
+
+(define (first-closer ctx e1 closes)
+  (define after (filter (λ (e3) (> (pmatch-ts e3) (pmatch-te e1))) closes))
+  (and (pair? after)
+       (car (sort after (λ (x y) (or (< (pmatch-ts x) (pmatch-ts y))
+                                     (and (= (pmatch-ts x) (pmatch-ts y))
+                                          (or (< (pmatch-te x) (pmatch-te y))
+                                              (and (= (pmatch-te x) (pmatch-te y))
+                                                   (< (cdr (pmatch-end ctx x)) (cdr (pmatch-end ctx y))))))))))))
+
+(register!
+ p:aperiodic?
+ (λ (ctx p denote)
+   (define opens (denote (p:aperiodic-open p)))
+   (define bodies (denote (p:aperiodic-body p)))
+   (define closes (denote (p:aperiodic-close p)))
+   (append*
+    (for/list ([e1 (in-list opens)])
+      (define e3 (first-closer ctx e1 closes))
+      (define inside (filter (λ (e2) (and (< (pmatch-te e1) (pmatch-ts e2))
+                                          (or (not e3) (< (pmatch-te e2) (pmatch-ts e3)))))
+                             bodies))
+      (cond
+        [(not (p:aperiodic-cumulative? p)) (for/list ([e2 (in-list inside)]) (pmatch-union ctx e1 e2))]
+        [(not e3) '()]
+        [else
+         (define names (map car (pattern-bindings (p:aperiodic-body p) #t)))
+         (define base (pmatch-union ctx e1 (struct-copy pmatch empty-match
+                                                        [bindings (for/hasheq ([n names]) (values n '()))])))
+         (list (pmatch-union ctx (for/fold ([acc base]) ([e2 (in-list inside)]) (pmatch-union ctx acc (lift e2)))
+                             e3))])))))

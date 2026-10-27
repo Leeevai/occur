@@ -120,3 +120,14 @@
   (check-equal? (ids (denote (where (seq A B) same-card) Hv)) '(("a" "b")))
   (define big (λ (bs) (> (apply + (map (λ (b) (event-attr b 'amount)) (hash-ref bs 'b))) 1000)))
   (check-equal? (ids (denote (where (kleene+ B) big) Hv)) '(("b" "b'"))))
+
+(spec-test '(PT.aperiodic PT.aperiodic-cumulative) "APER reports each event inside an open interval; APER* reports them all at the close"
+  (define S (prim 'S #:bind 's)) (define X (prim 'X #:bind 'x)) (define E (prim 'E #:bind 'e))
+  (define Hs (list (ev "x0" 'X 0) (ev "s1" 'S 1) (ev "x1" 'X 2) (ev "x2" 'X 3) (ev "e1" 'E 4) (ev "x3" 'X 5)
+                   (ev "s2" 'S 6) (ev "x4" 'X 7)))
+  (check-equal? (ids (denote (aperiodic S X E) Hs)) '(("s1" "x1") ("s1" "x2") ("s2" "x4")))
+  (define cum (denote (aperiodic* S X E) Hs))
+  (check-equal? (ids cum) '(("s1" "x1" "x2" "e1")))         ; s2 never closes
+  (check-equal? (map event-id (hash-ref (pmatch-bindings (car cum)) 'x)) '("x1" "x2"))
+  ;; a close with nothing inside still reports the interval
+  (check-equal? (ids (denote (aperiodic* S X E) (list (ev "s" 'S 1) (ev "e" 'E 2)))) '(("s" "e"))))
