@@ -43,3 +43,22 @@
       (define st (hash-ref marks (cons "d1" "d1-load")))
       (list (hwm-state-hw st) (hwm-state-late st) (run-result-counter r 'contributions 'late))))
   (check-equal? rows '((100 0 0) (105 5 5) (105 15 15) (105 25 25))))
+
+(require (prefix-in r3: "../examples/reflex/r3-window.rkt"))
+
+(define (triggers-for r target)
+  (for/list ([o (run-result-outputs r)]
+             #:when (and (eq? (output-node o) 'triggers) (equal? (event-attr (output-item o) 'target) target)))
+    (define e (output-item o))
+    (list (event-attr e 'emitted-at) (event-attr e 'reason) (event-attr e 'interval)
+          (event-attr e 'samples) (event-attr e 'windows) (event-attr e 'params))))
+
+(spec-test '(PT.window-close WN.tumbling TM.keyed-watermark OUT.coalesce)
+           "trace R3: a require_all window closes under W_all, coalescing windows that close together"
+  (define r (r3:occur-run))
+  (check-equal? (triggers-for r "all-kinds-job")
+                '((3 window (0 60) 200 1 #hasheq())
+                  (4 window (60 120) 180 1 #hasheq())
+                  (5 window (120 240) 170 2 #hasheq())))
+  ;; under mode any, [0, 60] closes at step 2, because W_any = 70 there
+  (check-equal? (car (triggers-for r "any-kind-job")) '(2 window (0 60) 120 1 #hasheq())))
