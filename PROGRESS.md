@@ -25,14 +25,17 @@ This file is the resume point for work on occur. Read it, together with
 | M16 | Acceptance: card testing | §15 | done |
 | M17 | Acceptance: Reflex | §16 | done |
 | M18 | Examples, Scribble docs, README, full coverage | all | done |
-| M19 | Release v0.1.0 | all | todo |
+| M19 | Release v0.1.0 | all | done |
 
 ## Next step
 
-M19: the release. Set the version to 0.1 in `info.rkt`, move the
-CHANGELOG's Unreleased entries under 0.1.0, create the annotated tag
-`v0.1.0`, and publish the GitHub release with notes taken from the
-CHANGELOG.
+Version 0.1.0 is released (annotated tag `v0.1.0` and its GitHub
+release). Further work starts from `docs/decisions/` and the known
+limitations: the engine keeps its buffers for a pattern's whole bound
+rather than pruning them by the watermark, deferral of interval events
+with long spans is conservative, windows other than tumbling and sliding
+retract a whole window when a retracted event was inside, and the runner
+keeps the whole input log for replay.
 
 Notes:
 - Hosted CI runs on every push (GitHub Actions, `.github/workflows/ci.yml`)
