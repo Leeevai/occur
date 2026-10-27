@@ -14,7 +14,7 @@ This file is the resume point for work on occur. Read it, together with
 | M5 | Time and progress | §6 | done (TM.checkpoint and TM.replay come with M15) |
 | M6 | Windows and contexts | §7 | done |
 | M7 | Aggregation | §8 | done |
-| M8 | Joins | §9 | todo |
+| M8 | Joins | §9 | done |
 | M9 | Allen relations | §10 | todo |
 | M10 | Pattern AST and reference oracle | §11 | todo |
 | M11 | Incremental pattern engine, deadline scheduler, differential tests | §11, §17 | todo |
@@ -29,8 +29,10 @@ This file is the resume point for work on occur. Read it, together with
 
 ## Next step
 
-M8: joins in `private/join.rkt` (windowed, interval, stream-table lookup,
-as-of, and outer variants) and a `(join ...)` stage.
+M9: Allen's interval algebra in `private/allen.rkt` (the 13 relations
+between proper intervals, point/point and point/interval relations) as
+functions usable in stage and pattern predicates, with a property test that
+exactly one relation holds.
 
 Notes:
 - Hosted CI runs are blocked by the account's GitHub billing; every commit
