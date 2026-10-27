@@ -419,3 +419,20 @@
                        #rx"unknown parameter #:samples" 3)
   (check-compile-error (string-append "#lang occur\n(rule-template t #:condition (pt:silence))\n")
                        #rx"missing parameter #:after" 2))
+
+(require (only-in "lang/replay.rkt" [occur-run replay-run]))
+
+(spec-test '(TM.checkpoint TM.replay DR.output-identity) "checkpoint, restore, and cold start from a script"
+  (define r (replay-run))
+  (define rows (for/list ([o (run-result-outputs r)]) (list (output-at o) (event-attr (output-item o) 'window))))
+  ;; trigger 2 repeats after the restore; the cold start re-derives the
+  ;; triggers and releases them, coalesced, at the push
+  (check-equal? (take rows 3) '((2 (1 2)) (4 (3 4)) (4 (3 4))))
+  (check-equal? (last rows) '(6 (6 6)))
+  ;; the cold start's held triggers are released at the push as one merged output
+  (check-equal? (for/list ([o (run-result-outputs r)] #:when (event-attr/default (output-item o) 'merged #f))
+                  (list (output-at o) (event-attr (output-item o) 'merged)))
+                '((5 3)))
+  ;; after deduplication by identity each trigger appears once
+  (check-equal? (length (remove-duplicates (map (λ (o) (event-attr (output-item o) 'identity)) (run-result-outputs r))))
+                (length (dedupe-outputs (run-result-outputs r)))))
