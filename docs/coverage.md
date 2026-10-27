@@ -39,16 +39,16 @@ Status values: `todo`, `partial`, `done`.
 | `ST.reorder` | §5 | `(reorder #:late drop)` stage | `reorder-operator` (private/ops/structure.rkt) | tests/structure-test.rkt, tests/lang-test.rkt |  | partial |
 | `ST.throttle` | §5 | `(throttle #:rate r #:per d)` / `#:every n` / `#:probability p #:seed s` | `throttle-operator` (private/ops/structure.rkt) | tests/structure-test.rkt, tests/lang-test.rkt |  | partial |
 | `TM.clock` | §6 | `#:clock event-time|processing-time|hybrid` (checked at compile time) | `clock?` (private/time.rkt) | tests/time-test.rkt, tests/lang-test.rkt |  | partial |
-| `TM.lateness` | §6 | | | | | todo |
-| `TM.keyed-watermark` | §6 | | | | | todo |
-| `TM.event-time` | §6 | | | | | todo |
-| `TM.processing-time` | §6 | `(script ...)` steps | `run` with `simulated-clock` (private/dataflow.rkt) | tests/lang-test.rkt |  | partial |
-| `TM.watermark` | §6 | `#:watermark ascending` / `(bounded-delay d)` on `source` | `watermark-to`, source strategies (private/dataflow.rkt) | tests/dataflow-test.rkt |  | partial |
-| `TM.idle` | §6 | | | | | todo |
-| `TM.skew-guard` | §6 | | | | | todo |
-| `TM.timer` | §6 | (M5) | operator `#:deadline` / `#:event-deadline` (private/dataflow.rkt) | tests/dataflow-test.rkt |  | partial |
-| `TM.schedule` | §6 | | | | | todo |
-| `TM.retraction` | §6 | (M5) | `retraction` items, provenance propagation (private/dataflow.rkt) | tests/dataflow-test.rkt |  | partial |
+| `TM.lateness` | §6 | `(lateness #:policy drop/side/(allow L) #:side-output s)` stage | `lateness-operator` (private/progress.rkt) | tests/progress-test.rkt, tests/lang-test.rkt |  | partial |
+| `TM.keyed-watermark` | §6 | `(keyed-watermark #:kinds (...) #:mode any/all)` stage | `keyed-wm-any` `keyed-wm-all` `keyed-watermark-operator` (private/progress.rkt) | tests/progress-test.rkt, tests/lang-test.rkt |  | partial |
+| `TM.event-time` | §6 | event time is the default clock; `#:clock event-time` | `delay-operator`, watermarks (private/progress.rkt, private/dataflow.rkt) | tests/progress-test.rkt |  | partial |
+| `TM.processing-time` | §6 | `(script ...)`; `#:clock processing-time` | `run` `simulated-clock` (private/dataflow.rkt) | tests/progress-test.rkt, tests/lang-test.rkt |  | partial |
+| `TM.watermark` | §6 | source `#:watermark none / ascending / (bounded-delay d) / (heartbeat T)`; script `(watermark s t)` | `watermark-to`, source strategies (private/dataflow.rkt) | tests/dataflow-test.rkt, tests/progress-test.rkt, tests/lang-test.rkt |  | partial |
+| `TM.idle` | §6 | `(idle d #:clock processing-time/hybrid)` stage; `(heartbeat T)` watermarks | `idle-operator` (private/progress.rkt) | tests/progress-test.rkt, tests/lang-test.rkt |  | partial |
+| `TM.skew-guard` | §6 | `(skew-guard B)` stage; source `#:skew-guard B` | `skew-guard-operator` (private/progress.rkt) | tests/progress-test.rkt, tests/lang-test.rkt |  | partial |
+| `TM.timer` | §6 | `(delay d #:clock c)` stage | `delay-operator`, operator deadlines (private/progress.rkt, private/dataflow.rkt) | tests/dataflow-test.rkt, tests/progress-test.rkt, tests/lang-test.rkt |  | partial |
+| `TM.schedule` | §6 | `(define-schedule name "cron")` | `parse-cron` `cron-next` `schedule-operator` (private/scheduler.rkt, private/progress.rkt) | tests/cron-test.rkt, tests/progress-test.rkt, tests/lang-test.rkt |  | partial |
+| `TM.retraction` | §6 | `(retraction-of id)` in source data; JSON Lines `{"retract": id}` | `retraction` items, provenance propagation, `emit-correction!` (private/dataflow.rkt, private/progress.rkt) | tests/dataflow-test.rkt, tests/progress-test.rkt, tests/lang-test.rkt |  | partial |
 | `TM.checkpoint` | §6 | | | | | todo |
 | `TM.replay` | §6 | | | | | todo |
 | `WN.tumbling` | §7 | | | | | todo |
