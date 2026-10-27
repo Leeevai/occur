@@ -601,8 +601,12 @@
 ;; (rule-template id #:condition condition option ...)                    RL.template
 ;; options: #:watch (kind ...), #:rate-limit (d drop|defer), #:flush d,
 ;; #:retain (max_delay), #:target e, #:params ([k v] ...),
-;; #:applies-to all | none | (key ...), #:on-update continue | restart.
-;; Templates are in force from the start (the module's `templates` source).
+;; #:applies-to all | none | (key ...), #:on-update continue | restart,
+;; #:id e (the rule id, by default the name), #:in-source.
+;; Templates are in force from the start (the module's `templates` source),
+;; except with #:in-source: such a template is in force only while a rule
+;; source that lists it is. Two templates with one #:id are two versions of
+;; one rule, which a script switches between by pushing a source.
 
 (define-syntax (rule-template stx)
   (syntax-parse stx
@@ -614,7 +618,9 @@
                       (~optional (~seq #:target tg:expr))
                       (~optional (~seq #:params ([pk:id pv:expr] ...)))
                       (~optional (~seq #:applies-to (~or* (~and all-kw (~datum all)) (~and none-kw (~datum none)) (ak:expr ...))))
-                      (~optional (~seq #:on-update (~and ou (~or* (~datum continue) (~datum restart))))))
+                      (~optional (~seq #:on-update (~and ou (~or* (~datum continue) (~datum restart)))))
+                      (~optional (~seq #:id rid:expr))
+                      (~optional (~and #:in-source in-source)))
         ...)
      (define cstatic (syntax-parse #'cnd [(h:id . _) (let ([v (lookup-static #'h)]) (and (condition-static? v) v))] [_ #f]))
      (for ([r (or (attribute rt) '())])
@@ -630,19 +636,26 @@
                    [target (or (attribute tg) #'#f)]
                    [cstatic-id (and cstatic (car (syntax->list (syntax-parse #'cnd [(h . _) #'(h)]))))])
        #`(begin
-           (define rt-id (make-rule (symbol->string 'name) #:condition cnd #:watch watch #:modifiers mods
+           (define rt-id (make-rule #,(or (attribute rid) #'(symbol->string 'name))
+                                    #:condition cnd #:watch watch #:modifiers mods
                                     #:target target #:params params #:applies-to applies #:on-update on-update))
            (define-syntax name (template-static 'name (symbol->string 'name)
                                                 #,(if cstatic #'(syntax-local-value (quote-syntax cstatic-id)) #'#f)
                                                 (quote-syntax rt-id)))
-           (registry-add-setup! occur-registry
-                                (list (control (rule-source-msg (list 'templates (variable-reference->module-source (#%variable-reference)) 'name)
-                                                                (list rt-id) 'replace)
-                                               #:config? #t)))))]))
+           #,@(if (attribute in-source)
+                  '()
+                  (list #'(registry-add-setup!
+                           occur-registry
+                           (list (control (rule-source-msg (list 'templates (variable-reference->module-source (#%variable-reference)) 'name)
+                                                           (list rt-id) 'replace)
+                                          #:config? #t)))))))]))
 
 ;; ---------------------------------------------------------------------------
-;; (rule-source name item ...)                                     RL.source
+;; (rule-source name maybe-at-start item ...)                      RL.source
 ;; items: template ids, (bind template #:on key option ...), or (jsonl path)
+;; The source is pushed at the start, unless #:at-start? is #f; a script
+;; pushes it with (rule-source-push 'source-name name), replacing whatever
+;; source of that name is in force.
 ;; (bind template #:on key maybe-also maybe-key maybe-watch override ... maybe-params)
 ;; Overrides are the condition's overridable keywords, checked at compile time.
 
@@ -686,7 +699,7 @@
 
 (define-syntax (rule-source stx)
   (syntax-parse stx
-    [(_ name:id item ...)
+    [(_ name:id (~optional (~seq #:at-start? at-start:expr)) item ...)
      (define items
        (for/list ([it (syntax->list #'(item ...))])
          (syntax-parse it
@@ -697,10 +710,12 @@
                (module-relative-path (variable-reference->module-source (#%variable-reference)) path))]
            [t:id #:when (template-static? (lookup-static #'t)) (template-static-runtime-id (lookup-static #'t))]
            [_ (raise-syntax-error 'rule-source "expected a template, (bind …), or (jsonl path)" stx it)])))
-     ;; the source's name is bound to its items, so a script can push it again
+     ;; the source's name is bound to its items, so a script can push it, or
+     ;; push it again; with #:at-start? #f only a script pushes it
      #`(begin
          (define name (flatten-items (list #,@items)))
-         (registry-add-setup! occur-registry
-                              (list (control (rule-source-msg 'name name 'replace) #:config? #t))))]))
+         (when #,(if (attribute at-start) #'at-start #'#t)
+           (registry-add-setup! occur-registry
+                                (list (control (rule-source-msg 'name name 'replace) #:config? #t)))))]))
 
 (define (flatten-items xs) (append* (map (λ (x) (if (list? x) x (list x))) xs)))

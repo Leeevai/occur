@@ -516,3 +516,13 @@
   ;; ticks from 10:20 on, not from 1970
   (check-equal? (map (λ (e) (event-attr e 'first)) (by-node r 'hourly)) (list (utc 2026 1 5 11 0) (utc 2026 1 5 12 0)))
   (check-equal? (by-node r 'per-minute) '()))
+
+(require (only-in "lang/edits.rkt" [occur-run edits-run]))
+
+(spec-test '(RL.rejudge RL.semantics RL.source) "a script pushes a second version of a rule: a job-only edit re-judges"
+  (define r (edits-run))
+  (check-equal? (map (λ (e) (list (event-attr e 'emitted-at) (event-attr e 'rule) (event-attr e 'reason)
+                                  (event-attr e 'window) (event-attr e 'samples) (event-attr e 'params)))
+                     (by-node r 'triggers))
+                (list (list 1000 "threshold" 'config '(500 500) 0 (hasheq 'threshold 40))
+                      (list 1020 "threshold" 'samples '(500 520) 3 (hasheq 'threshold 40)))))
