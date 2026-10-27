@@ -10,6 +10,9 @@
 
 (define (ev id type t [payload '()] #:te [te t]) (make-event type payload #:id id #:ts t #:te te))
 (define (ids ms) (map pmatch-ids ms))
+;; the matches as a set of id lists, for comparisons where order is not the point
+(define (id-set ms) (sort (map pmatch-ids ms) (λ (a b) (string<? (format "~a" a) (format "~a" b)))))
+(define (set-of . xs) (sort xs (λ (a b) (string<? (format "~a" a) (format "~a" b)))))
 (define A (prim 'A #:bind 'a))
 (define B (prim 'B #:bind 'b))
 (define C (prim 'C #:bind 'c))
@@ -29,3 +32,14 @@
   (check-equal? (ids ms) '(()))
   (check-equal? (list (pmatch-ts (car ms)) (pmatch-te (car ms))) '(0 0))
   (check-equal? (denote act H) '()))
+
+(spec-test 'PT.sequence "⟦P₁ ; P₂⟧ pairs matches with te(m₁) < ts(m₂); equal times are not in sequence"
+  (check-equal? (ids (denote (seq A B) H)) '(("a1" "b1") ("a1" "b2") ("a2" "b2")))
+  (check-equal? (ids (denote (seq A B C) H)) '(("a1" "b1" "c1") ("a1" "b2" "c1") ("a2" "b2" "c1")))
+  (check-equal? (denote (seq A B) (list (ev "a" 'A 5) (ev "b" 'B 5))) '())
+  ;; interval events: te(m₁) < ts(m₂)
+  (check-equal? (ids (denote (seq A B) (list (ev "a" 'A 1 #:te 4) (ev "b" 'B 3) (ev "b'" 'B 5))))
+                '(("a" "b'")))
+  (define m (car (denote (seq A B) H)))
+  (check-equal? (list (pmatch-ts m) (pmatch-te m)) '(1 2))
+  (check-equal? (sort (hash-keys (pmatch-bindings m)) symbol<?) '(a b)))

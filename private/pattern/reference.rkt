@@ -138,3 +138,20 @@
   [index-of-event (-> oracle-ctx? event? exact-nonnegative-integer?)]
   [denote (->* (pat? (listof event?)) (#:activation (or/c #f time?) #:horizon (or/c #f time?))
                (listof pmatch?))]))
+;; ===========================================================================
+;; PT.sequence: ⟦P₁ ; P₂⟧ = { m₁ ∪ m₂ : m₁ ∈ ⟦P₁⟧, m₂ ∈ ⟦P₂⟧, te(m₁) < ts(m₂) }.
+;; Events with equal timestamps are not in sequence (no tiebreak, decision
+;; 0010). The steps that begin m₂ follow the end of m₁.
+
+;; The predecessor point a match gives the step after it; an empty match
+;; (ε) constrains nothing.
+(define (pred-of ctx m)
+  (if (and (null? (pmatch-events m)) (eqv? (pmatch-te m) -inf.0)) #f (pmatch-end ctx m)))
+
+(register!
+ p:seq?
+ (λ (ctx p denote)
+   (define L (denote (p:seq-left p)))
+   (define R (denote (p:seq-right p)))
+   (for*/list ([m1 (in-list L)] [m2 (in-list R)] #:when (< (pmatch-te m1) (pmatch-ts m2)))
+     (pmatch-union ctx m1 m2 #:pred (pred-of ctx m1)))))
