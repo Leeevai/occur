@@ -72,3 +72,13 @@
                   (900 recovered (none 890))
                   (1490 silence (890 1490))
                   (1600 recovered (890 1600)))))
+
+(require (prefix-in r5: "../examples/reflex/r5-cron.rkt"))
+
+(define (hm h m) (utc 2026 1 5 h m))
+
+(spec-test '(PT.schedule WN.calendar WN.empty TM.schedule OUT.coalesce)
+           "trace R5: missed hourly ticks coalesce into one output, and an empty hour still fires"
+  (check-equal? (triggers (r5:occur-run))
+                (list (list (hm 13 10) 'schedule (list (hm 10 0) (hm 13 0)) 5 3 #hasheq())
+                      (list (hm 14 0) 'schedule (list (hm 13 0) (hm 14 0)) 0 1 #hasheq()))))
