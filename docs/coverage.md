@@ -89,11 +89,11 @@ Status values: `todo`, `partial`, `done`.
 | `AG.top-k` | §8 | `(top-k e k #:by value/frequency)` in `(aggregate ...)` | `top-k-agg` (private/aggregate.rkt) | tests/aggregate-test.rkt, tests/lang-test.rkt |  | partial |
 | `AG.approx` | §8 | `(approx-distinct e)` `(approx-percentile e p)` `(approx-frequency e x)` `(count-min e)` in `(aggregate ...)` | `approx-distinct-agg` `approx-percentile-agg` `approx-frequency-agg` (private/sketch.rkt) | tests/sketch-test.rkt, tests/lang-test.rkt |  | partial |
 | `AG.incremental` | §8 | windowed `(aggregate ...)` after `(window ...)` in `(aggregate ...)` | `aggregate-accumulator`, two-stack queue, `mono-deque` (private/aggregate.rkt, private/window.rkt) | tests/aggregate-test.rkt, tests/incremental-test.rkt, tests/window-prop-test.rkt |  | partial |
-| `JN.window` | §9 | | | | | todo |
-| `JN.interval` | §9 | | | | | todo |
-| `JN.table` | §9 | | | | | todo |
-| `JN.as-of` | §9 | | | | | todo |
-| `JN.outer` | §9 | | | | | todo |
+| `JN.window` | §9 | `(join s #:kind window #:window (tumbling #:size d) #:key a #:on θ)` | `window-join-operator` (private/join.rkt) | tests/join-test.rkt, tests/lang-test.rkt |  | partial |
+| `JN.interval` | §9 | `(join s #:kind interval #:lower d1 #:upper d2 #:key a)` | `interval-join-operator` (private/join.rkt) | tests/join-test.rkt, tests/lang-test.rkt |  | partial |
+| `JN.table` | §9 | `(join t #:kind table #:key a)` | `table-join-operator` (private/join.rkt) | tests/join-test.rkt, tests/lang-test.rkt |  | partial |
+| `JN.as-of` | §9 | `(join v #:kind as-of #:key a #:valid-from e)` | `as-of-join-operator` (private/join.rkt) | tests/join-test.rkt, tests/lang-test.rkt |  | partial |
+| `JN.outer` | §9 | `#:outer left/right/full` on a join | `#:outer` of the join operators (private/join.rkt) | tests/join-test.rkt, tests/lang-test.rkt |  | partial |
 | `AL.before` | §10 | | | | | todo |
 | `AL.after` | §10 | | | | | todo |
 | `AL.meets` | §10 | | | | | todo |
