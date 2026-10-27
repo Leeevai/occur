@@ -62,3 +62,42 @@
   [dedupe-operator (->* ((-> event? any/c) #:horizon duration?)
                         (#:clock (or/c 'event-time 'processing-time))
                         operator?)]))
+
+;; ---------------------------------------------------------------------------
+;; ST.monotonic-merge: per sub-stream s, a high-water mark hw(s), starting at
+;; −∞, and counters. For each arrival e on s:
+;;
+;;   new(e) = share(e, hw(s))
+;;   if new(e) > 0: emit a contribution c with ts(c) = max(ts(e), hw(s)),
+;;                  te(c) = te(e), n(c) = new(e); then hw(s) := te(e)
+;;   late(s) += n(e) − new(e)
+;;
+;; Re-applying an applied event is a no-op, data wholly behind hw(s) is
+;; dropped and counted (a lateness policy), and hw(s) is a per-sub-stream
+;; watermark.
+
+(struct hwm-state (hw late contributions) #:transparent)
+
+(define (monotonic-merge-operator substream-fn)
+  (make-operator
+   'monotonic-merge
+   #:key substream-fn
+   #:init-key (λ (g k c) (hwm-state -inf.0 0 0))
+   #:on-event
+   (λ (g s e c)
+     (define hw (hwm-state-hw s))
+     (define new (batch-share e hw))
+     (define dropped (- (event-n e) new))
+     (when (> dropped 0) (count! c 'late dropped))
+     (cond
+       [(> new 0)
+        (emit! c (event-update e #:id (fresh-id) #:ts (time-max (event-ts e) hw) #:n new
+                               #:src 'monotonic-merge #:constituents (list e)))
+        (hwm-state (event-te e) (+ (hwm-state-late s) dropped) (add1 (hwm-state-contributions s)))]
+       [else (hwm-state hw (+ (hwm-state-late s) dropped) (hwm-state-contributions s))]))))
+
+(provide
+ (contract-out
+  [struct hwm-state ([hw time?] [late exact-nonnegative-integer?]
+                     [contributions exact-nonnegative-integer?])]
+  [monotonic-merge-operator (-> (-> event? any/c) operator?)]))

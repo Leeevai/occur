@@ -53,3 +53,54 @@
   (check-equal? (ids (run-result-events r)) '("a" "a"))
   ;; the remembered times are forgotten a horizon after the last event
   (check-equal? (hash-count (cdr (hash-ref (run-result-states r) 'op))) 1))
+
+(define (sensor id ts te n) (make-batch-event 'Reading '((sensor . "s1")) #:id id #:ts ts #:te te #:n n))
+(define (merge-run arrivals)
+  (run-operator (monotonic-merge-operator (λ (e) (event-attr e 'sensor))) (list arrivals)
+                #:arrivals (list (for/list ([i (length arrivals)]) i))))
+
+(spec-test '(ST.monotonic-merge ES.batch) "trace R2: contributions, high-water marks, and late counts"
+  (define arrivals (list (sensor "a" 90 100 10) (sensor "b" 95 105 10)
+                         (sensor "c" 95 105 10) (sensor "d" 80 90 10)))
+  ;; replay the trace one arrival at a time and check the table row by row
+  (define rows
+    (for/list ([k (in-range 1 5)])
+      (define r (merge-run (take arrivals k)))
+      (define st (hash-ref (cdr (hash-ref (run-result-states r) 'op)) "s1"))
+      (list (hwm-state-hw st) (hwm-state-late st))))
+  (check-equal? rows '((100 0) (105 5) (105 15) (105 25)))
+  (define out (run-result-events (merge-run arrivals)))
+  (check-equal? (map (λ (e) (list (event-ts e) (event-te e) (event-n e))) out) '((90 100 10) (100 105 5)))
+  (check-equal? (map (λ (e) (map event-id (event-constituents e))) out) '(("a") ("b"))))
+
+(define gen:batches
+  (gen:let ([specs (gen:list (gen:tuple (gen:integer-in 0 50) (gen:integer-in 0 20) (gen:integer-in 0 12))
+                             #:max-length 10)])
+    (for/list ([s specs] [i (in-naturals)])
+      (sensor (format "e~a" i) (car s) (+ (car s) (cadr s)) (caddr s)))))
+
+(define (merged arrivals)
+  (define r (merge-run arrivals))
+  (values (map (λ (e) (list (event-ts e) (event-te e) (event-n e))) (run-result-events r))
+          (let ([st (hash-ref (cdr (hash-ref (run-result-states r) 'op)) "s1" #f)])
+            (and st (list (hwm-state-hw st))))))
+
+(spec-test 'ST.monotonic-merge "property: re-applying already-applied arrivals is a no-op"
+  (check-property
+   (make-config #:tests (trials))
+   (property ([xs gen:batches] [k (gen:integer-in 0 10)])
+     ;; replay any prefix of what was already applied, after the fact
+     (define replay (take xs (min k (length xs))))
+     (define-values (out1 hw1) (merged xs))
+     (define-values (out2 hw2) (merged (append xs replay)))
+     (check-equal? out2 out1)
+     (check-equal? hw2 hw1))))
+
+(spec-test 'ST.monotonic-merge "property: contributions never overlap and never exceed their arrival"
+  (check-property
+   (make-config #:tests (trials))
+   (property ([xs gen:batches])
+     (define-values (out _hw) (merged xs))
+     (for ([a out] [b (if (null? out) '() (cdr out))])
+       (check-true (<= (cadr a) (car b))))
+     (check-true (<= (apply + 0 (map caddr out)) (apply + 0 (map event-n xs)))))))
