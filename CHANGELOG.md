@@ -77,3 +77,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and downstream deduplication, ordered delivery per instant, closure of
   derived streams, bounded feedback loops behind the cycle guard, actions,
   and materialized views with scheduled export and health classification.
+- Rules as data (M14): templates, bindings with overrides and params,
+  fan-out, instance identity, named sources replaced whole or patched,
+  ownership, dangling and invalid items reported, fingerprints and edit
+  classes, progress carry, re-judge on edit, and convergence; the rules
+  engine with accumulate (and flush), window close, silence (and recovery),
+  and schedule conditions under deferring rate limits; `define-condition`,
+  `rule-template`, `rule-source`, `bind`, and the `(rules)` stage; JSON
+  Lines rule items; traces R1 and R3 to R6 of §16.7 on the runtime.
