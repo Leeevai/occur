@@ -122,13 +122,16 @@
 
 (struct view-state (state last-arrival newest next-export) #:transparent)
 
+;; With #:lifecycle? #f the view ignores entity lifecycle signals, as a view
+;; keyed by something other than the entity (such as a sensor) must.
 (define (view-operator #:key [key #f] #:init init #:update update
                        #:project [project (λ (s now arrival newest) s)]
-                       #:export-every [period #f] #:type [type 'View])
+                       #:export-every [period #f] #:type [type 'View]
+                       #:lifecycle? [lifecycle? #t])
   (make-operator
    'view
    #:key key
-   #:lifecycle? #t
+   #:lifecycle? lifecycle?
    #:init-key (λ (g k c) (view-state (init) #f -inf.0
                                      (and period (+ (* period (floor (/ (ctx-now c) period))) period))))
    #:on-event (λ (g st e c)
@@ -180,7 +183,8 @@
   [action-operator (->* ((-> event? any/c)) (#:completion (or/c #f symbol?)) operator?)]
   [view-operator (->* (#:init (-> any/c) #:update (-> any/c event? time? any/c))
                       (#:key (or/c #f (-> event? any/c)) #:project procedure?
-                       #:export-every (or/c #f (and/c real? positive?)) #:type symbol?)
+                       #:export-every (or/c #f (and/c real? positive?)) #:type symbol?
+                       #:lifecycle? boolean?)
                       operator?)]
   [view-ref (->* (run-result? symbol? any/c) (#:project procedure?) any/c)]
   [classify-health (-> #:now time? #:last-arrival (or/c #f time?) #:newest time?

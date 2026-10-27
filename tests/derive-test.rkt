@@ -121,3 +121,22 @@
   (check-true (retraction? (second items)))
   (check-equal? (event-type (retraction-event (second items))) 'Level2)
   (check-equal? (event-id (retraction-event (second items))) (event-id (first items))))
+
+(require (only-in "../private/context.rkt" entity-context-operator directory-push))
+
+(spec-test '(DR.view CX.entity CX.activation) "a view follows entity lifecycle signals unless told not to"
+  ;; behind a device directory, two views keyed by sensor: one follows the
+  ;; devices' lifecycle, one ignores it
+  (define (sensor-view lc) (view-operator #:key (λ (e) (event-attr e 'sensor)) #:init (λ () 0)
+                                          #:update (λ (s e now) (add1 s)) #:lifecycle? lc))
+  (define src (make-source 'in))
+  (define gate (make-node 'gate (entity-context-operator 'devices #:key (λ (e) (event-attr e 'dev))) (list src)))
+  (define follows (make-node 'follows (sensor-view #t) (list gate) #:sink? #t))
+  (define ignores (make-node 'ignores (sensor-view #f) (list gate) #:sink? #t))
+  (define r (run (make-program (list follows ignores))
+                 (list (directory-push 'devices '(("d1" . active) ("d2" . active)) #:at 0)
+                       (arrive 1 'in (make-event 'R '((dev . "d1") (sensor . "s1")) #:at 1)))))
+  (define (keys node) (sort (map (λ (k) (format "~a" k)) (hash-keys (cdr (hash-ref (run-result-states r) node)))) string<?))
+  ;; the activations of d1 and d2 became keys of the sensor view that follows them
+  (check-equal? (keys 'follows) '("d1" "d2" "s1"))
+  (check-equal? (keys 'ignores) '("s1")))

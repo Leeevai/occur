@@ -436,20 +436,24 @@
 
 ;; ---------------------------------------------------------------------------
 ;; (define-view name #:from stream maybe-key #:init expr #:update expr
-;;              maybe-project maybe-export)                              DR.view
+;;              maybe-project maybe-export maybe-lifecycle)              DR.view
 ;; #:update sees `state`, `now`, `it`, and the event's attributes. With
 ;; #:project expr, what is exported is expr, which sees `state`, `now`,
 ;; `last-arrival` (the processing time of the key's last event), and
 ;; `newest` (its newest end time), as a health classification needs. The
 ;; view is queried with (view-ref result 'name key) and, with
 ;; #:export-every d, emits a View event per key every d of processing time.
+;; A view follows its entities' lifecycle (an activated entity has a state
+;; before it sends anything; a dropped one loses it) unless #:lifecycle? is
+;; #f, as for a view keyed by something other than the entity.
 
 (define-syntax (define-view stx)
   (syntax-parse stx
     [(_ name:id (~alt (~once (~seq #:from up:id)) (~optional (~seq #:key k:id))
                       (~once (~seq #:init init:expr)) (~once (~seq #:update upd:expr))
                       (~optional (~seq #:project proj:expr))
-                      (~optional (~seq #:export-every d:expr)))
+                      (~optional (~seq #:export-every d:expr))
+                      (~optional (~seq #:lifecycle? lc:expr)))
         ...)
      (define v (lookup-upstream #'up))
      (define shp (if (source-static? v) (apply type-shape (source-static-types v)) (stream-static-shape v)))
@@ -467,10 +471,12 @@
                                   #'(λ (st nw la nwst) proj))
                                 #'(λ (s now arrival newest) s))]
                    [key key] [input input]
-                   [export (or (attribute d) #'#f)])
+                   [export (or (attribute d) #'#f)]
+                   [lifecycle (or (attribute lc) #'#t)])
        #'(begin
            (define rt (make-node 'name (view-operator #:key key #:init (λ () init) #:update update
-                                                      #:project project #:export-every export)
+                                                      #:project project #:export-every export
+                                                      #:lifecycle? lifecycle)
                                  (list input) #:sink? #t))
            (define-syntax name (make-stream-static 'name (shape '((View (key . Any) (view . Any))))
                                                    (quote-syntax rt) #:key (quote-syntax key)))
