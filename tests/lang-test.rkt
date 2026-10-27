@@ -86,3 +86,54 @@
   (define src (hash-ref (program-sources p) 'feed))
   (check-equal? (length ((source-data src))) 4)
   (check-equal? (source-watermark src) '(bounded-delay 30)))
+
+(require (only-in "lang/ops.rkt" [occur-run ops-run]))
+
+(define (by-node r node) (run-result-events r node))
+
+(spec-test '(OP.filter OP.project OP.map OP.enrich OP.split OP.route)
+           "the single-event stages run as declared"
+  (define r (ops-run))
+  (check-equal? (map event-id (by-node r 'big)) '("a"))
+  (check-equal? (map event-payload (by-node r 'slim))
+                (list (hasheq 'card "c1" 'amount 1500) (hasheq 'card "c2" 'amount 3)))
+  (check-equal? (map (λ (e) (list (event-type e) (event-attr e 'cents))) (by-node r 'charges))
+                '((Charge 150000) (Charge 300)))
+  (check-equal? (map (λ (e) (list (event-attr e 'amount) (event-attr e 'flag))) (by-node r 'doubled))
+                '((3000 #t) (6 #t)))
+  (check-equal? (map (λ (e) (event-attr e 'category)) (by-node r 'categorized)) '("grocery"))
+  (check-equal? (map (λ (e) (list (event-attr e 'sensor) (event-n e) (event-ts e) (event-te e)))
+                     (by-node r 'readings))
+                '(("s1" 3 0 2) ("s2" 5 1 9)))
+  (check-equal? (map event-id (by-node r 'large)) '("a"))
+  (check-equal? (map event-id (by-node r 'small)) '("b"))
+  (check-equal? (by-node r 'by-size) '()))
+
+(define ops-header
+  (string-append header "(source feed #:types (Swipe))\n"))
+
+(spec-test 'OP.project "projecting an attribute the stream does not carry is a compile-time error"
+  (check-compile-error (string-append ops-header "(define-stream s (from feed)\n (project card zip))\n")
+                       #rx"unknown attribute zip: Swipe events carry \\(card amount\\)" 5))
+
+(spec-test 'OP.map "a typed map must give exactly the type's attributes"
+  (check-compile-error (string-append ops-header "(event-type C [card : String] [cents : Integer])\n"
+                                      "(define-stream s (from feed)\n (map C [card card]))\n")
+                       #rx"missing attribute cents" 6)
+  (check-compile-error (string-append ops-header "(event-type C [card : String])\n"
+                                      "(define-stream s (from feed)\n (map C [card card] [zip 1]))\n")
+                       #rx"unknown attribute zip for event type C" 6))
+
+(spec-test 'OP.split "a split child needs a time"
+  (check-compile-error (string-append ops-header
+                                      "(define-stream s (from feed)\n (split Swipe #:for ([i 3]) [card card] [amount i]))\n")
+                       #rx"each child needs #:ts" 5))
+
+(spec-test 'OP.route "route must be the last stage"
+  (check-compile-error (string-append ops-header
+                                      "(define-stream s (from feed)\n (route [a #t])\n (filter #t))\n")
+                       #rx"must be the last stage" 5))
+
+(spec-test 'OP.filter "stage expressions see the attributes of the shape"
+  (check-compile-error (string-append ops-header "(define-stream s (from feed) (filter (> amont 1)))\n")
+                       #rx"amont: unbound identifier" 4))

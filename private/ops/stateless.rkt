@@ -154,3 +154,10 @@
   [route-operator (->* ((listof (-> event? any/c)))
                        (#:mode (or/c 'exclusive 'inclusive) #:otherwise? boolean?)
                        operator?)]))
+
+;; A reference given as a table (hash) or a procedure.
+(define (as-lookup v) (if (hash? v) (table-lookup v) v))
+
+(provide
+ (contract-out
+  [as-lookup (-> (or/c hash? procedure?) procedure?)]))
