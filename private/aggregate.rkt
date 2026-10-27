@@ -254,3 +254,37 @@
   [count-distinct-agg (-> (-> event? any/c) aggregator?)]
   [mode-agg (-> (-> event? any/c) aggregator?)]
   [top-k-agg (->* ((-> event? any/c) exact-positive-integer?) (#:by (or/c 'value 'frequency)) aggregator?)]))
+
+;; ===========================================================================
+;; AG.approx: approximate, constant-size aggregates built on sketches.
+
+(require "sketch.rkt")
+
+(define (approx-distinct-agg f #:precision [b 12])
+  (make-aggregator 'approx-distinct 'approximate
+                   #:init (λ () (make-hll b)) #:add (λ (s e) (hll-add s (f e)))
+                   #:combine hll-merge #:result (λ (s) (exact-round (hll-estimate s)))))
+
+(define (approx-percentile-agg f p #:compression [delta 100])
+  (make-aggregator 'approx-percentile 'approximate
+                   #:init (λ () (make-tdigest delta)) #:add (λ (s e) (tdigest-add s (f e)))
+                   #:combine tdigest-merge #:result (λ (s) (tdigest-quantile s p))))
+
+;; The estimated frequency of the value x; count-min-agg returns the sketch.
+(define (approx-frequency-agg f x #:width [w 272] #:depth [d 5])
+  (make-aggregator 'approx-frequency 'approximate
+                   #:init (λ () (make-count-min w d)) #:add (λ (s e) (count-min-add s (f e)))
+                   #:combine count-min-merge #:result (λ (s) (count-min-estimate s x))))
+(define (count-min-agg f #:width [w 272] #:depth [d 5])
+  (make-aggregator 'count-min 'approximate
+                   #:init (λ () (make-count-min w d)) #:add (λ (s e) (count-min-add s (f e)))
+                   #:combine count-min-merge))
+
+(provide
+ (contract-out
+  [approx-distinct-agg (->* ((-> event? any/c)) (#:precision (integer-in 4 16)) aggregator?)]
+  [approx-percentile-agg (->* ((-> event? real?) (real-in 0 1)) (#:compression (and/c real? positive?)) aggregator?)]
+  [approx-frequency-agg (->* ((-> event? any/c) any/c) (#:width exact-positive-integer? #:depth exact-positive-integer?)
+                             aggregator?)]
+  [count-min-agg (->* ((-> event? any/c)) (#:width exact-positive-integer? #:depth exact-positive-integer?)
+                      aggregator?)]))
