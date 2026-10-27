@@ -6,7 +6,7 @@
 (define collection "occur")
 (define pkg-desc
   "A Racket DSL for event processing: the event space, stream operators, windows, joins, a complete CEP pattern algebra, and rules as data")
-(define version "0.0.0")
+(define version "0.0")
 (define pkg-authors '("Leeevai"))
 (define license 'MIT)
 
