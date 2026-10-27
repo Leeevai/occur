@@ -406,3 +406,111 @@
   [since-last-window-operator (->* ((-> hash? any/c) accumulator?)
                                    (#:key (or/c #f (-> event? any/c)) #:type symbol?)
                                    operator?)]))
+
+;; ===========================================================================
+;; WN.calendar: windows between consecutive ticks of a calendar schedule,
+;; [tick_{i−1}, tick_i).
+;;
+;; On the processing clock (TM.schedule), events are assigned by arrival
+;; time, and a window started mid-period ends at the period's next tick: an
+;; instance created at 10:20 on an hourly schedule has the first period
+;; [10:00, 11:00). Ticks that came due together close one coalesced window
+;; whose `windows` attribute counts them (OUT.coalesce). Calendar windows
+;; fire even when empty by default (WN.empty). An unkeyed calendar window
+;; starts with the run.
+;;
+;; On the event-time clock, events are assigned by ts and each window fires
+;; when the watermark reaches its closing tick.
+
+(struct cal-state (period-start handled acc contents) #:transparent)
+
+(define (calendar-window-operator expr acc
+                                  #:clock [clock 'processing-time]
+                                  #:key [key #f]
+                                  #:fire-empty? [fire-empty? #t]
+                                  #:type [type 'Window])
+  (define cr (if (cron? expr) expr (parse-cron expr)))
+  (if (eq? clock 'processing-time)
+      (processing-calendar cr acc key fire-empty? type)
+      (event-calendar cr acc key fire-empty? type)))
+
+(define (processing-calendar cr acc key fire-empty? type)
+  (make-operator
+   'calendar-window
+   #:monotone? #f
+   #:key key
+   #:eager? #t
+   #:lifecycle? #t
+   #:init-key (λ (gl k c)
+                (define now (ctx-now c))
+                (cal-state (or (cron-prev cr now) now) now ((accumulator-init acc)) '()))
+   #:on-event (λ (gl st e c)
+                (struct-copy cal-state st [acc ((accumulator-add acc) (cal-state-acc st) e)]
+                             [contents (cons e (cal-state-contents st))]))
+   #:deadline (λ (st) (cron-next cr (cal-state-handled st)))
+   #:on-timer
+   (λ (gl st c)
+     (define ticks (cron-ticks-between cr (cal-state-handled st) (ctx-now c)))
+     (cond
+       [(null? ticks) st]
+       [else
+        (define closing (last ticks))
+        (when (or fire-empty? (pair? (cal-state-contents st)))
+          (emit! c (window-output type (ctx-key c) (cal-state-period-start st) closing acc (cal-state-acc st)
+                                  (reverse (cal-state-contents st))
+                                  #:extra (hasheq 'windows (length ticks)))))
+        (cal-state closing closing ((accumulator-init acc)) '())]))))
+
+(define (event-calendar cr acc key fire-empty? type)
+  ;; per key: windows hash start -> win, the anchor, and the next start to fire
+  (define (window-of t) (cons (or (cron-prev cr t) -inf.0) (or (cron-next cr t) +inf.0)))
+  (define (emit-win! c w)
+    (emit! c (window-output type (ctx-key c) (win-start w) (win-end w) acc (win-acc w) (reverse (win-contents w)))))
+  (make-operator
+   'calendar-window
+   #:monotone? #f
+   #:key key
+   #:init-key (λ (gl k c) (grid-state (hash) #f #f empty-keyed-wm))
+   #:on-event
+   (λ (gl st e c)
+     (define w0 (window-of (event-ts e)))
+     (define s (car w0))
+     (define anchor (or (grid-state-anchor st) s))
+     (cond
+       [(or (< s anchor) (<= (cdr w0) (ctx-watermark c))) (count! c 'late) st]
+       [else
+        (define w (or (hash-ref (grid-state-windows st) s #f)
+                      (win s (cdr w0) ((accumulator-init acc)) '() #f)))
+        (struct-copy grid-state st
+                     [windows (hash-set (grid-state-windows st) s
+                                        (struct-copy win w [acc ((accumulator-add acc) (win-acc w) e)]
+                                                     [contents (cons e (win-contents w))]))]
+                     [anchor anchor] [next (or (grid-state-next st) anchor)])]))
+   #:event-deadline
+   (λ (st) (define next (grid-state-next st))
+     (and next (cron-next cr next)))
+   #:on-timer
+   (λ (gl st c)
+     (define W0 (ctx-watermark c))
+     ;; at the end of the stream, stop after the newest window with data
+     (define W (if (eqv? W0 +inf.0)
+                   (for/fold ([m -inf.0]) ([w (in-hash-values (grid-state-windows st))]) (time-max m (win-end w)))
+                   W0))
+     (let loop ([ws (grid-state-windows st)] [next (grid-state-next st)])
+       (define end (and next (cron-next cr next)))
+       (cond
+         [(and end (<= end W))
+          (define w (hash-ref ws next #f))
+          (cond [w (emit-win! c w)]
+                [fire-empty? (emit-win! c (win next end ((accumulator-init acc)) '() #f))])
+          (loop (hash-remove ws next) end)]
+         [else (struct-copy grid-state st [windows ws] [next (if (eqv? W0 +inf.0) #f next)])])))))
+
+(provide
+ (contract-out
+  [calendar-window-operator (->* ((or/c string? cron?) accumulator?)
+                                 (#:clock (or/c 'processing-time 'event-time)
+                                  #:key (or/c #f (-> event? any/c))
+                                  #:fire-empty? boolean?
+                                  #:type symbol?)
+                                 operator?)]))

@@ -14,10 +14,10 @@
 (define (wins r) (for/list ([e (run-result-events r)])
                    (list (event-ts e) (event-te e) (event-attr e 'count))))
 
-(define (run-window op steps #:final? [final? #t])
+(define (run-window op steps #:final? [final? #t] #:start [start 0])
   (define src (make-source 'in))
   (define n (make-node 'w op (list src) #:sink? #t))
-  (run (make-program (list n)) steps #:final-watermark? final?))
+  (run (make-program (list n)) steps #:final-watermark? final? #:clock (simulated-clock start)))
 
 (spec-test 'WN.tumbling "tumbling windows fire when the watermark reaches their end"
   (define r (run-window (grid-window-operator (tumbling 10) contents-accumulator)
@@ -167,3 +167,27 @@
   (define r (run-window op (for/list ([t '(0 10 20 25 40 50)] [n '(1 1 1 2 1 1)] [i (in-naturals)])
                              (arrive t 'in (pt (format "e~a" i) t #:n n)))))
   (check-equal? (wins r) '((0 20 3) (25 40 3))))
+
+(define (hm h m) (utc 2026 1 5 h m))
+
+(spec-test '(WN.calendar WN.empty OUT.coalesce) "processing-time calendar windows: mid-period start, coalesced missed ticks, empty periods"
+  ;; the geometry of trace R5: created at 10:20 on an hourly schedule
+  (define op (calendar-window-operator "0 * * * *" contents-accumulator))
+  (define r (run-window op (list (arrive (hm 10 30) 'in (pt "a" 0 #:n 2)) (arrive (hm 10 45) 'in (pt "b" 0 #:n 3))
+                                 (suspend (hm 10 50) (hm 13 10)) (advance-to (hm 14 30)))
+                        #:final? #f #:start (hm 10 20)))
+  (check-equal? (for/list ([o (run-result-outputs r)])
+                  (define e (output-item o))
+                  (list (output-at o) (event-ts e) (event-te e) (event-attr e 'windows) (event-attr e 'count)))
+                (list (list (hm 13 10) (hm 10 0) (hm 13 0) 3 5)
+                      (list (hm 14 0) (hm 13 0) (hm 14 0) 1 0))))
+
+(spec-test 'WN.calendar "event-time calendar windows fire when the watermark reaches the closing tick"
+  (define op (calendar-window-operator "0 6 * * *" contents-accumulator #:clock 'event-time))
+  (define day 86400)
+  (define r (run-window op (list (arrive 1 'in (pt "a" (+ (utc 2026 1 5 7 0) 0)))
+                                 (arrive 2 'in (pt "b" (utc 2026 1 7 9 0))))))
+  (check-equal? (map (λ (e) (list (event-ts e) (event-te e) (event-attr e 'count))) (run-result-events r))
+                (list (list (utc 2026 1 5 6 0) (utc 2026 1 6 6 0) 1)
+                      (list (utc 2026 1 6 6 0) (utc 2026 1 7 6 0) 0)
+                      (list (utc 2026 1 7 6 0) (utc 2026 1 8 6 0) 1))))
