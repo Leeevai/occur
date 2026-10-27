@@ -90,3 +90,12 @@
   (check-equal? (triggers (r6:occur-run))
                 '((1000 config (500 500) 0 1 #hasheq((threshold . 40)))
                   (1020 samples (500 520) 3 1 #hasheq((threshold . 40))))))
+
+(require (prefix-in r6s: "../examples/reflex/r6-semantic-edit.rkt"))
+
+(spec-test '(RL.carry RL.semantics)
+           "trace R6, semantic edit: continue carries progress and evaluates at once; restart waits for new data"
+  (define r (r6s:occur-run))
+  (check-equal? (triggers-for r "continue-job") '((1000 samples (500 510) 2 1 #hasheq())))
+  ;; restart: nothing at the edit; two new contributions later, the first output
+  (check-equal? (triggers-for r "restart-job") '((1110 samples (1100 1110) 2 1 #hasheq()))))
