@@ -531,3 +531,10 @@
   (define exported (for*/list ([phase+names (append vars stxs)] [n (cdr phase+names)]) (car n)))
   (check-equal? (sort exported symbol<?) '(Ping ping))
   (check-equal? (map (λ (e) (event-attr e 'dev)) (by-node (uses-libs-run) 'all-pings)) '("d1" "d2")))
+
+(require (only-in "lang/run-options.rkt" [occur-run run-options-run]))
+
+(spec-test '(TM.processing-time TM.schedule) "run-options sets the clock's start for a module that runs on its sources' data"
+  (define r (run-options-run))
+  (check-equal? (length (by-node r 'all-readings)) 2)
+  (check-equal? (map (λ (e) (event-attr e 'first)) (by-node r 'hourly)) (list (utc 2026 1 5 11 0) (utc 2026 1 5 12 0))))

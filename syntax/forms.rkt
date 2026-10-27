@@ -40,6 +40,7 @@
          define-stream
          define-schedule
          script
+         run-options
          jsonl events data)
 
 ;; ---------------------------------------------------------------------------
@@ -218,6 +219,17 @@
            #,@(if (attribute t0) (list #'(registry-set-option! occur-registry 'start t0)) '())
            #,@(if (attribute fw) (list #'(registry-set-option! occur-registry 'final-watermark? fw)) '())
            (registry-set-script! occur-registry (list st ...))))]))
+
+;; (run-options option ...): the script options, for a module that runs on its
+;; sources' own data rather than a script: #:start t and #:final-watermark? b.
+
+(define-syntax (run-options stx)
+  (syntax-parse stx
+    [(_ (~alt (~optional (~seq #:start t0:expr)) (~optional (~seq #:final-watermark? fw:expr))) ...)
+     #`(begin
+         #,@(if (attribute t0) (list #'(registry-set-option! occur-registry 'start t0)) '())
+         #,@(if (attribute fw) (list #'(registry-set-option! occur-registry 'final-watermark? fw)) '())
+         (void))]))
 
 ;; ---------------------------------------------------------------------------
 ;; (define-schedule name "cron expression")                       TM.schedule
