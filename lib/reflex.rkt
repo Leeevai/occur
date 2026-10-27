@@ -8,7 +8,7 @@
 ;; (tests/reflex-purity.rkt checks the first).
 (provide DataArrival SensorData Trigger
          sensor-write
-         accumulate window silence)
+         accumulate window silence cron)
 
 ;; ---------------------------------------------------------------------------
 ;; §16.1 Inputs
@@ -60,6 +60,12 @@
 ;; override Δ.
 (define-condition silence #:as pt:silence
   #:rename ([#:after-s #:after] [#:emit-recovery #:recovery]))
+
+;; cron(expr) = PT.schedule: WN.calendar(expr, processing time, UTC) with
+;; WN.empty, so an empty period still fires; ticks missed together are
+;; coalesced into one output (OUT.coalesce). expr has the five fields of
+;; cron, read in UTC.
+(define-condition cron #:as pt:schedule #:rename ())
 
 ;; ---------------------------------------------------------------------------
 ;; §16.3 Outputs

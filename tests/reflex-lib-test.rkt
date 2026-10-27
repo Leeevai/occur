@@ -34,3 +34,7 @@
   (check-equal? (condition-of "(silence #:after-s 600 #:emit-recovery #t)")
                 (list 'silence (hasheq 'after 600 'recovery #t)))
   (check-equal? (condition-of "(silence #:after-s 300)") (list 'silence (hasheq 'after 300 'recovery #f))))
+
+(spec-test '(PT.schedule WN.calendar TM.schedule)
+           "cron(expr) is PT.schedule over the calendar windows of a five-field UTC expression"
+  (check-equal? (condition-of "(cron \"0 * * * *\")") (list 'schedule (hasheq 'cron "0 * * * *"))))
