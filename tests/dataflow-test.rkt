@@ -240,3 +240,12 @@
   (define r (run (make-program (list n))
                  (list (arrive 1 'in (ev "a" 1)) (watermark-to 'in 10) (watermark-to 'in 11)) #:final-watermark? #f))
   (check-equal? (map event-ts (run-result-events r)) '(11)))
+
+(test-case "a processing deadline strictly after an instant fires once time moves on, or at the end"
+  (define op (make-operator 'later #:init-key (λ (g k c) (ctx-now c))
+                            #:on-event (λ (g s e c) s)
+                            #:deadline (λ (s) (and s (strictly-after s)))
+                            #:on-timer (λ (g s c) (emit! c (make-event 'Later '() #:at (ctx-now c))) #f)))
+  (define n (make-node 'later op (list src) #:sink? #t))
+  (check-equal? (ats (run (make-program (list n)) (list (arrive 5 'in (ev "a" 5)) (arrive 9 'in (ev "b" 9))))) '(5 9))
+  (check-equal? (ats (run (make-program (list n)) (list (arrive 5 'in (ev "a" 5))))) '(5)))

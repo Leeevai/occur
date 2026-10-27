@@ -121,7 +121,7 @@
                        #:init-key (-> any/c any/c ctx? any/c)
                        #:on-event (-> any/c any/c event? ctx? any/c)
                        #:on-timer (-> any/c any/c ctx? any/c)
-                       #:deadline (-> any/c (or/c #f time?))
+                       #:deadline (-> any/c (or/c #f time? strictly-after?))
                        #:event-deadline (-> any/c (or/c #f time? strictly-after?))
                        #:on-watermark (or/c #f (-> any/c hash? time? ctx? (values any/c hash?)))
                        #:on-control (or/c #f (-> any/c hash? any/c ctx? (values any/c hash?)))

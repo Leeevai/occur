@@ -262,7 +262,7 @@
   ;; deadline that is already due: that would wake it again with nothing to
   ;; do, forever (for example at the final watermark).
   (define d ((operator-deadline op) kstate))
-  (when (and d (not (and stalled? (<= d (runner-now r)))))
+  (when (and d (not (and stalled? (deadline-due? d (runner-now r)))))
     (set-runner-pdl! r (deadlines-arm (runner-pdl r) (cons name key) d)))
   (define ed ((operator-event-deadline op) kstate))
   (when (and ed (not (and stalled? (deadline-due? ed (W r name)))))
@@ -385,11 +385,17 @@
 
 ;; Fire processing-time deadlines due at or before `limit`. Outside a
 ;; suspension each fires at its own time; after a suspension every overdue
-;; instance fires once, at the resume time.
-(define (fire-processing-deadlines! r limit)
+;; instance fires once, at the resume time. With #:drain?, deadlines strictly
+;; after the limit's instant also fire (the script has ended, so processing
+;; time is taken to move on past it).
+(define (fire-processing-deadlines! r limit #:drain? [drain? #f])
   (unless (runner-suspended? r)
     (let loop ()
-      (define-values (token t pdl) (deadlines-pop-due (runner-pdl r) limit))
+      (define-values (token t pdl)
+        (let-values ([(tok t d) (deadlines-pop-due (runner-pdl r) limit)])
+          (if (or tok (not drain?))
+              (values tok t d)
+              (deadlines-pop-due (runner-pdl r) (+ limit (/ 1 1000000000))))))
       (when token
         (set-runner-pdl! r pdl)
         (set-runner-now! r (time-max (runner-now r) t))
@@ -501,6 +507,9 @@
       (advance-source-watermark! r src +inf.0))
     (fire-processing-deadlines! r (runner-now r))
     (flush-outbox! r))
+  ;; deadlines waiting for processing time to move past the last instant
+  (fire-processing-deadlines! r (runner-now r) #:drain? #t)
+  (flush-outbox! r)
   (run-result (reverse (runner-outputs r)) (runner-counters r) (reverse (runner-reports r))
               (runner-now r) (runner-wm r) (runner-states r)))
 
