@@ -20,12 +20,6 @@
 
 (define header "#lang occur\n(event-type Swipe [card : String] [amount : Real])\n")
 
-(define-syntax-rule (check-compile-error src rx line)
-  (let ([r (compile-error src)])
-    (check-true (list? r) (format "expected a compile-time error for ~s" src))
-    (when r
-      (check-regexp-match rx (first r))
-      (check-equal? (second r) line))))
 
 (spec-test 'ES.type "duplicate attribute names are a compile-time error"
   (check-compile-error "#lang occur\n(event-type X [a : Real]\n  [a : String])\n"

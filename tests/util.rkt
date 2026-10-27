@@ -15,6 +15,7 @@
          compile-occur
          eval-occur
          compile-error
+         check-compile-error
          compile-warnings)
 
 ;; spec-ids->string : (or/c symbol? (listof symbol?)) -> string?
@@ -74,6 +75,15 @@
                            (and (pair? exprs) (syntax-line (car exprs)))))])
     (compile-occur src)
     #f))
+
+;; Check that `src` fails to compile with a message matching `rx`, reported
+;; at source line `line`.
+(define-syntax-rule (check-compile-error src rx line)
+  (let ([r (compile-error src)])
+    (check-true (list? r) (format "expected a compile-time error for ~s" src))
+    (when r
+      (check-regexp-match rx (car r))
+      (check-equal? (cadr r) line))))
 
 ;; The compile-time warnings printed on stderr while expanding `src`.
 (define (compile-warnings src)
