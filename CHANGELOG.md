@@ -33,3 +33,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `monotonic-merge` (trace R2), `reorder`, and `throttle`, with source keying
   options (`#:key`, `#:substream`, `#:kind`, `#:merge high-water-mark`) and a
   property test that partitioned runs emit what one run emits.
+- Time and progress (M5): keyed data-driven watermarks (W^any, W^all), the
+  future-skew guard, lateness policies with side outputs and allowed
+  lateness, event- and processing-time timers, idleness detection and
+  heartbeat watermarks, five-field UTC cron schedules with coalesced missed
+  ticks (`define-schedule`), generator nodes, and retractions in source
+  data.
