@@ -51,3 +51,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Joins (M8): windowed, interval, stream-table, and as-of joins with left,
   right, and full outer variants, and the `(join ...)` stage with `left.`
   and `right.` attribute references.
+- Allen relations (M9): the 13 interval relations, point/point and
+  point/interval relations, `allen-relation` and a predicate per relation,
+  over intervals and events.
