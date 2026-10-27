@@ -8,7 +8,7 @@
 ;; (tests/reflex-purity.rkt checks the first).
 (provide DataArrival SensorData Trigger
          sensor-write
-         accumulate window)
+         accumulate window silence)
 
 ;; ---------------------------------------------------------------------------
 ;; §16.1 Inputs
@@ -51,6 +51,15 @@
 (define-condition window #:as pt:window-close
   #:rename ([#:window-s #:size] [#:offset-s #:offset]
             [#:require-all #:mode (λ (all?) (if all? 'all 'any))]))
+
+;; silence(Δ, recovery?) = PT.silence on the hybrid clock (the newest sample
+;; time + Δ, compared with now), with the device's activation as the
+;; initiator ACT (CX.activation), so silence is counted from watch start;
+;; with #:emit-recovery, + PT.recovery, the first contribution after a
+;; silence; together they are edge-triggered (OUT.edge). A binding may
+;; override Δ.
+(define-condition silence #:as pt:silence
+  #:rename ([#:after-s #:after] [#:emit-recovery #:recovery]))
 
 ;; ---------------------------------------------------------------------------
 ;; §16.3 Outputs

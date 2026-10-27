@@ -28,3 +28,9 @@
                 (list 'window-close (hasheq 'size 60 'offset 0 'mode 'all)))
   (check-equal? (condition-of "(window #:window-s 900 #:offset-s 30 #:require-all #f)")
                 (list 'window-close (hasheq 'size 900 'offset 30 'mode 'any))))
+
+(spec-test '(PT.silence PT.recovery PT.activation OUT.edge)
+           "silence(Δ, recovery?) is PT.silence, with PT.recovery when emit_recovery"
+  (check-equal? (condition-of "(silence #:after-s 600 #:emit-recovery #t)")
+                (list 'silence (hasheq 'after 600 'recovery #t)))
+  (check-equal? (condition-of "(silence #:after-s 300)") (list 'silence (hasheq 'after 300 'recovery #f))))
