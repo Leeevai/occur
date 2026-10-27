@@ -82,3 +82,11 @@
   (check-equal? (triggers (r5:occur-run))
                 (list (list (hm 13 10) 'schedule (list (hm 10 0) (hm 13 0)) 5 3 #hasheq())
                       (list (hm 14 0) 'schedule (list (hm 13 0) (hm 14 0)) 0 1 #hasheq()))))
+
+(require (prefix-in r6: "../examples/reflex/r6-job-edit.rkt"))
+
+(spec-test '(RL.rejudge RL.semantics CON.retain)
+           "trace R6, job-only edit: one config output, and the pending contribution stays pending"
+  (check-equal? (triggers (r6:occur-run))
+                '((1000 config (500 500) 0 1 #hasheq((threshold . 40)))
+                  (1020 samples (500 520) 3 1 #hasheq((threshold . 40))))))
