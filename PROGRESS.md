@@ -7,7 +7,7 @@ This file is the resume point for work on occur. Read it, together with
 
 | # | Milestone | Spec | Status |
 |---|---|---|---|
-| M1 | Event space | §2 | todo |
+| M1 | Event space | §2 | done (runtime; surface forms follow in M2) |
 | M2 | `#lang occur` skeleton and scripted runner | §2, §6 | todo |
 | M3 | Single-event operations | §4 | todo |
 | M4 | Stream structure, including high-water-mark merging | §5 | todo |
@@ -29,7 +29,12 @@ This file is the resume point for work on occur. Read it, together with
 
 ## Next step
 
-Bootstrap the repository (CI, milestone issues), then start M1.
+M2: the `#lang occur` reader and expander skeleton, `event-type`, `source`,
+compile-time schema checks, and the scripted runner with a simulated
+processing clock and a deadline min-heap.
+
+Note: hosted CI runs are blocked by the account's GitHub billing; every
+commit is verified locally with `scripts/ci-local.sh` until that is fixed.
 
 ## Spec IDs
 
