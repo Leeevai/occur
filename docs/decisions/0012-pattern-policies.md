@@ -1,6 +1,6 @@
 # 0012. Selection, consumption, output, skip, and evaluation policies
 
-- Status: accepted
+- Status: accepted; amended by [0016](0016-final-output.md) (when last and maximal output are final)
 - Date: 2026-10-27
 - Spec: §12
 
