@@ -36,3 +36,4 @@ time.
 @include-section["aggregation.scrbl"]
 @include-section["joins.scrbl"]
 @include-section["allen.scrbl"]
+@include-section["patterns.scrbl"]
