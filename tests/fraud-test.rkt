@@ -171,3 +171,18 @@
   (check-equal? (for/list ([o (outs 'lockout)])
                   (list (output-at o) (event-attr (output-item o) 'reason) (map event-id (event-constituents (output-item o)))))
                 (list (list (m 23) 'timeout '("d1" "d2" "d3" "d4")))))
+
+;; --- derivation --------------------------------------------------------
+
+(spec-test '(DR.closure DR.derive ES.composite ES.space) "a pattern over derived alerts escalates a card"
+  (check-equal? (attrs 'escalations 'card 'reasons) '(("c1" ("far-login" "unconfirmed"))))
+  ;; the escalation is two levels above the payments
+  (check-equal? (map event-level (events 'escalations)) '(2)))
+
+(spec-test 'DR.act "each escalation notifies the fraud desk, with a completion event"
+  (check-equal? (unbox fraud:notified) '("c1"))
+  (check-equal? (attrs 'notify 'result) '((sent))))
+
+(spec-test 'DR.cycle-guard "a review fed back on itself stops at the cycle guard's bound"
+  (check-equal? (map event-level (events 'reviews)) '(3 4))
+  (check-equal? (for/sum ([c (in-hash-values (run-result-counters r))]) (hash-ref c 'recursion-bound 0)) 1))
