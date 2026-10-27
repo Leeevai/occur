@@ -9,7 +9,7 @@ This file is the resume point for work on occur. Read it, together with
 |---|---|---|---|
 | M1 | Event space | §2 | done (runtime; surface forms follow in M2) |
 | M2 | `#lang occur` skeleton and scripted runner | §2, §6 | done |
-| M3 | Single-event operations | §4 | todo |
+| M3 | Single-event operations | §4 | done |
 | M4 | Stream structure, including high-water-mark merging | §5 | todo |
 | M5 | Time and progress | §6 | todo |
 | M6 | Windows and contexts | §7 | todo |
@@ -29,10 +29,10 @@ This file is the resume point for work on occur. Read it, together with
 
 ## Next step
 
-M3: single-event operations (`OP.filter`, `OP.project`, `OP.map`,
-`OP.enrich`, `OP.split`, `OP.route`) as runtime operators in
-`private/ops/stateless.rkt` and as `define-stream` stages, with attribute
-references in stage expressions checked against the stream's shape.
+M4: stream structure (`ST.merge`, `ST.key-by`, `ST.dedupe`,
+`ST.monotonic-merge`, `ST.reorder`, `ST.throttle`) in
+`private/ops/structure.rkt`, with stages and the source options `#:key`,
+`#:substream`, `#:kind`, and `#:merge high-water-mark`.
 
 Notes:
 - Hosted CI runs are blocked by the account's GitHub billing; every commit
