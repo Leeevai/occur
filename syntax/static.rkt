@@ -12,6 +12,9 @@
                        "../private/io.rkt"))
 
 (provide (struct-out directory-static)
+         (struct-out condition-static)
+         (struct-out template-static)
+         condition-overridable
          make-source-static
          make-stream-static
          clock-name?
@@ -211,3 +214,25 @@
     (syntax-case stx ()
       [id (identifier? #'id) (directory-static-runtime-id self)]
       [_ (raise-syntax-error #f "a directory is not a procedure" stx)])))
+
+;; ---------------------------------------------------------------------------
+;; Rule conditions and templates (§14)
+
+;; params: list of (vector keyword param-symbol default-syntax overridable?)
+;; positional: #f or the param symbol a single positional argument sets
+;; kind: the runtime condition kind; expand: (stx -> syntax) building the value
+(struct condition-static (name kind params positional expand)
+  #:property prop:procedure
+  (λ (self stx) ((condition-static-expand self) stx)))
+
+;; A template: its rule id, the condition-static of its condition (or #f
+;; when the condition is a runtime expression), and its runtime value.
+(struct template-static (name rule-id condition runtime-id)
+  #:property prop:procedure
+  (λ (self stx)
+    (syntax-case stx ()
+      [id (identifier? #'id) (template-static-runtime-id self)]
+      [_ (raise-syntax-error #f "a rule template is not a procedure" stx)])))
+
+(define (condition-overridable c)
+  (for/list ([p (condition-static-params c)] #:when (vector-ref p 3)) (vector-ref p 0)))

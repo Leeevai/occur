@@ -390,3 +390,32 @@
 (spec-test 'DR.cycle-guard "a stream that consumes itself without #:recursive is a compile-time error"
   (check-compile-error (string-append header "(source feed #:types (Swipe))\n(define-stream s (from feed)\n (feedback s))\n")
                        #rx"cycle guard: stream s consumes its own outputs" 5))
+
+(require (only-in "lang/rules.rkt" [occur-run rules-run]))
+
+(spec-test '(RL.template RL.binding RL.fan-out RL.source PT.accumulate OUT.rate-limit)
+           "templates, sources, and bindings through #lang occur (trace R1 on d1)"
+  (define r (rules-run))
+  (define (row e) (list (event-attr e 'emitted-at) (event-attr e 'rule) (event-attr e 'key) (event-attr e 'binding-key)
+                        (event-attr e 'reason) (event-attr e 'window) (event-attr e 'samples)))
+  (check-equal? (map row (by-node r 'triggers))
+                '((20 "threshold-check" "d1" "" samples (0 20) 3)
+                  (56 "threshold-check" "d2" "cfg-41" samples (55 56) 2)
+                  (80 "threshold-check" "d1" "" samples (25 50) 4)))
+  (check-equal? (event-attr (second (by-node r 'triggers)) 'params) (hasheq 'threshold 40)))
+
+(define rules-header
+  (string-append "#lang occur\n(event-type A [dev : String] [kind : String])\n"
+                 "(source s #:types (A) #:key dev)\n"
+                 "(rule-template t #:condition (pt:accumulate #:count 3) #:applies-to none)\n"))
+
+(spec-test 'RL.binding "a binding override that does not fit the template's condition is a compile-time error"
+  (check-compile-error (string-append rules-header "(rule-source src (bind t #:on \"d\"\n #:after 5))\n")
+                       #rx"#:after does not fit t's condition \\(pt:accumulate\\); overridable: \\(#:count #:span\\)" 6)
+  (check-false (compile-error (string-append rules-header "(rule-source src (bind t #:on \"d\" #:count 5))\n"))))
+
+(spec-test 'RL.template "condition parameters are checked at compile time"
+  (check-compile-error (string-append "#lang occur\n(rule-template t #:condition\n (pt:accumulate #:samples 3))\n")
+                       #rx"unknown parameter #:samples" 3)
+  (check-compile-error (string-append "#lang occur\n(rule-template t #:condition (pt:silence))\n")
+                       #rx"missing parameter #:after" 2))

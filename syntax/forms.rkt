@@ -1,6 +1,7 @@
 #lang racket/base
 ;; Declaration forms of #lang occur.
 (require racket/stxparam
+         racket/list
          "registry-param.rkt"
          "../private/time.rkt"
          "../private/event.rkt"
@@ -13,6 +14,8 @@
          "../private/pattern/ast.rkt"
          "../private/pattern/operators.rkt"
          "../private/derive.rkt"
+         "../private/rules.rkt"
+         "../private/rules-engine.rkt"
          (for-syntax racket/base
                      racket/list
                      racket/syntax
@@ -23,6 +26,11 @@
                      "patterns.rkt"))
 
 (provide event-type
+         define-condition
+         rule-template
+         rule-source
+         bind
+         pt:accumulate pt:window-close pt:silence pt:schedule
          define-pattern
          define-view
          act
@@ -465,3 +473,197 @@
            (define rt (make-node 'name (action-operator proc #:completion completion) (list input) #:sink? #t))
            (define-syntax name (make-stream-static 'name (shape '((ActionCompleted (result . Any)))) (quote-syntax rt)))
            (registry-add-node! occur-registry rt)))]))
+
+;; ---------------------------------------------------------------------------
+;; (define-condition name #:kind kind #:parameters ([#:kw param default maybe-override] ...)
+;;                   maybe-positional)
+;; (define-condition name #:as other #:rename ([#:kw #:other-kw] ...))          RL.template
+;;
+;; A condition form builds a rule condition. Its parameters are keywords,
+;; checked at compile time; those marked #:override are the numeric
+;; parameters a binding may override (RL.binding). A library defines its
+;; vocabulary with #:as, renaming the keywords of another condition form.
+
+(begin-for-syntax
+  (define (condition-expander name kind params positional)
+    (λ (stx)
+      (syntax-parse stx
+        [(_ (~optional (~and pos (~not _:keyword))) (~seq kw:keyword v:expr) ...)
+         (define given (map syntax-e (syntax->list #'(kw ...))))
+         (for ([k (syntax->list #'(kw ...))])
+           (unless (for/or ([p params]) (eq? (vector-ref p 0) (syntax-e k)))
+             (raise-syntax-error name (format "unknown parameter ~a; expected ~a" (syntax-e k)
+                                              (map (λ (p) (vector-ref p 0)) params))
+                                 stx k)))
+         (when (and (attribute pos) (not positional))
+           (raise-syntax-error name "this condition takes no positional argument" stx #'pos))
+         (define values-by-param
+           (for/list ([p params])
+             (define i (index-of given (vector-ref p 0)))
+             (cons (vector-ref p 1)
+                   (cond [i (list-ref (syntax->list #'(v ...)) i)]
+                         [(and positional (eq? positional (vector-ref p 1)) (attribute pos)) #'pos]
+                         [(vector-ref p 2) (vector-ref p 2)]
+                         [else (raise-syntax-error name (format "missing parameter ~a" (vector-ref p 0)) stx)]))))
+         #`(condition '#,kind (hasheq #,@(append* (for/list ([pv values-by-param]) (list #`'#,(car pv) (cdr pv))))))]
+        [_ (raise-syntax-error name "expected keyword parameters" stx)]))))
+
+(define-syntax (define-condition stx)
+  (syntax-parse stx
+    [(_ name:id #:kind kind:id #:parameters ([kw:keyword param:id (~optional default:expr) (~optional (~and o #:override))] ...)
+        (~optional (~seq #:positional pos:id)))
+     (define params (for/list ([k (syntax->list #'(kw ...))] [p (syntax->list #'(param ...))]
+                               [d (attribute default)] [o (attribute o)])
+                      ;; a default is kept wrapped in a list, so that #f is a default too
+                      (vector (syntax-e k) (syntax-e p) (and d (list (syntax->datum d))) (and o #t))))
+     (with-syntax ([params-datum params] [positional (and (attribute pos) (syntax-e #'pos))])
+       #'(define-syntax name
+           (let ([ps (map (λ (v) (vector (vector-ref v 0) (vector-ref v 1)
+                                         (and (vector-ref v 2) (datum->syntax #'name (car (vector-ref v 2))))
+                                         (vector-ref v 3)))
+                          'params-datum)])
+             (condition-static 'name 'kind ps 'positional
+                               (condition-expander 'name 'kind ps 'positional)))))]
+    [(_ name:id #:as other:id #:rename ([kw:keyword okw:keyword] ...))
+     (define target (lookup-static #'other))
+     (unless (condition-static? target) (raise-syntax-error 'define-condition "not a condition" stx #'other))
+     (for ([o (syntax->list #'(okw ...))])
+       (unless (for/or ([p (condition-static-params target)]) (eq? (vector-ref p 0) (syntax-e o)))
+         (raise-syntax-error 'define-condition (format "~a has no parameter ~a" (syntax-e #'other) (syntax-e o)) stx o)))
+     (with-syntax ([renames (map cons (map syntax-e (syntax->list #'(kw ...))) (map syntax-e (syntax->list #'(okw ...))))])
+       #'(define-syntax name
+           (let* ([t (syntax-local-value #'other)]
+                  [rn 'renames]
+                  [ps (for/list ([r rn])
+                        (define tp (for/first ([p (condition-static-params t)] #:when (eq? (vector-ref p 0) (cdr r))) p))
+                        (vector (car r) (vector-ref tp 1) (vector-ref tp 2) (vector-ref tp 3)))])
+             (condition-static 'name (condition-static-kind t) ps (condition-static-positional t)
+                               (λ (use)
+                                 ;; rename the keywords and expand as the target condition
+                                 (syntax-case use ()
+                                   [(_ . args)
+                                    (let loop ([xs (syntax->list #'args)] [acc '()])
+                                      (cond
+                                        [(null? xs) (datum->syntax use (cons (quote-syntax other) (reverse acc)) use)]
+                                        [(keyword? (syntax-e (car xs)))
+                                         (define m (assq (syntax-e (car xs)) rn))
+                                         (unless m (raise-syntax-error 'name (format "unknown parameter ~a; expected ~a"
+                                                                                    (syntax-e (car xs)) (map car rn))
+                                                                       use (car xs)))
+                                         (loop (cddr xs) (list* (cadr xs) (datum->syntax (car xs) (cdr m)) acc))]
+                                        [else (loop (cdr xs) (cons (car xs) acc))]))]))))))]))
+
+;; The core conditions, named after their spec IDs.
+(define-condition pt:accumulate #:kind accumulate
+  #:parameters ([#:count count 1 #:override] [#:span span 0 #:override]))
+(define-condition pt:window-close #:kind window-close
+  #:parameters ([#:size size] [#:offset offset 0] [#:mode mode 'all]))
+(define-condition pt:silence #:kind silence
+  #:parameters ([#:after after #:override] [#:recovery recovery #f]))
+(define-condition pt:schedule #:kind schedule
+  #:parameters ([#:cron cron]) #:positional cron)
+
+;; ---------------------------------------------------------------------------
+;; (rule-template id #:condition condition option ...)                    RL.template
+;; options: #:watch (kind ...), #:rate-limit (d drop|defer), #:flush d,
+;; #:retain (max_delay), #:target e, #:params ([k v] ...),
+;; #:applies-to all | none | (key ...), #:on-update continue | restart.
+;; Templates are in force from the start (the module's `templates` source).
+
+(define-syntax (rule-template stx)
+  (syntax-parse stx
+    [(_ name:id (~alt (~once (~seq #:condition cnd:expr))
+                      (~optional (~seq #:watch (w:expr ...)))
+                      (~optional (~seq #:rate-limit (rl:expr (~optional (~and mode (~or* (~datum drop) (~datum defer)))))))
+                      (~optional (~seq #:flush fl:expr))
+                      (~optional (~seq #:retain (rt:id ...)))
+                      (~optional (~seq #:target tg:expr))
+                      (~optional (~seq #:params ([pk:id pv:expr] ...)))
+                      (~optional (~seq #:applies-to (~or* (~and all-kw (~datum all)) (~and none-kw (~datum none)) (ak:expr ...))))
+                      (~optional (~seq #:on-update (~and ou (~or* (~datum continue) (~datum restart))))))
+        ...)
+     (define cstatic (syntax-parse #'cnd [(h:id . _) (let ([v (lookup-static #'h)]) (and (condition-static? v) v))] [_ #f]))
+     (for ([r (or (attribute rt) '())])
+       (unless (memq (syntax-e r) '(max_delay)) (raise-syntax-error 'rule-template "only max_delay outputs can be retained" stx r)))
+     (with-syntax ([rt-id (format-id #'name "~a-rule" #'name)]
+                   [mods #`(hasheq #,@(if (attribute rl) (list #''rate-limit #`(cons #,(attribute rl) '#,(if (attribute mode) (syntax-e #'mode) 'defer))) '())
+                                   #,@(if (attribute fl) (list #''flush (attribute fl)) '())
+                                   #,@(if (attribute rt) (list #''flush-retain? #'#t) '()))]
+                   [watch (if (attribute w) #'(list w ...) #'#f)]
+                   [params (if (attribute pk) #'(list (cons 'pk pv) ...) #''())]
+                   [applies (cond [(attribute none-kw) #''none] [(attribute ak) #'(list ak ...)] [else #''all])]
+                   [on-update (if (attribute ou) #`'#,(syntax-e #'ou) #''restart)]
+                   [target (or (attribute tg) #'#f)]
+                   [cstatic-id (and cstatic (car (syntax->list (syntax-parse #'cnd [(h . _) #'(h)]))))])
+       #`(begin
+           (define rt-id (make-rule (symbol->string 'name) #:condition cnd #:watch watch #:modifiers mods
+                                    #:target target #:params params #:applies-to applies #:on-update on-update))
+           (define-syntax name (template-static 'name (symbol->string 'name)
+                                                #,(if cstatic #'(syntax-local-value (quote-syntax cstatic-id)) #'#f)
+                                                (quote-syntax rt-id)))
+           (registry-add-setup! occur-registry
+                                (list (control (rule-source-msg (list 'templates (variable-reference->module-source (#%variable-reference)) 'name)
+                                                                (list rt-id) 'replace)
+                                               #:config? #t)))))]))
+
+;; ---------------------------------------------------------------------------
+;; (rule-source name item ...)                                     RL.source
+;; items: template ids, (bind template #:on key option ...), or (jsonl path)
+;; (bind template #:on key maybe-also maybe-key maybe-watch override ... maybe-params)
+;; Overrides are the condition's overridable keywords, checked at compile time.
+
+(define-syntax (bind stx) (raise-syntax-error #f "only allowed in a rule-source" stx))
+
+(begin-for-syntax
+  (define (compile-bind b)
+    (syntax-parse b
+      [(_ t:id (~seq kw:keyword v:expr) ...)
+       (define ts (lookup-static #'t))
+       (unless (template-static? ts) (raise-syntax-error 'bind "not a rule template" b #'t))
+       (define cs (template-static-condition ts))
+       (define overridable (if cs (condition-overridable cs) '()))
+       (define-values (on also bkey watch params overrides)
+         (for/fold ([on #f] [also #f] [bkey #f] [watch #f] [params #f] [overrides '()])
+                   ([k (syntax->list #'(kw ...))] [x (syntax->list #'(v ...))])
+           (case (syntax-e k)
+             [(#:on) (values x also bkey watch params overrides)]
+             [(#:also) (values on x bkey watch params overrides)]
+             [(#:key) (values on also x watch params overrides)]
+             [(#:watch) (values on also bkey x params overrides)]
+             [(#:params) (values on also bkey watch x overrides)]
+             [else
+              (unless (memq (syntax-e k) overridable)
+                (raise-syntax-error 'bind
+                                    (format "~a does not fit ~a's condition~a; overridable: ~a"
+                                            (syntax-e k) (syntax-e #'t)
+                                            (if cs (format " (~a)" (condition-static-name cs)) "")
+                                            overridable)
+                                    b k))
+              (define param (for/first ([p (condition-static-params cs)] #:when (eq? (vector-ref p 0) (syntax-e k)))
+                              (vector-ref p 1)))
+              (values on also bkey watch params (cons (cons param x) overrides))])))
+       (unless on (raise-syntax-error 'bind "a binding needs #:on key" b))
+       #`(make-binding #,(template-static-rule-id ts)
+                       #:on (cons #,on #,(if also (syntax-parse also [(k ...) #'(list k ...)] [e #'e]) #''()))
+                       #:key #,(or bkey #'"")
+                       #:watch #,(if watch (syntax-parse watch [(k ...) #'(list k ...)]) #'#f)
+                       #:overrides (list #,@(for/list ([o (reverse overrides)]) #`(cons '#,(car o) #,(cdr o))))
+                       #:params #,(if params (syntax-parse params [([pk:id pv:expr] ...) #'(list (cons 'pk pv) ...)]) #''()))])))
+
+(define-syntax (rule-source stx)
+  (syntax-parse stx
+    [(_ name:id item ...)
+     (define items
+       (for/list ([it (syntax->list #'(item ...))])
+         (syntax-parse it
+           #:literals (bind jsonl)
+           [(bind . _) (compile-bind it)]
+           [(jsonl path:str)
+            #`(read-jsonl-rule-items
+               (module-relative-path (variable-reference->module-source (#%variable-reference)) path))]
+           [t:id #:when (template-static? (lookup-static #'t)) (template-static-runtime-id (lookup-static #'t))]
+           [_ (raise-syntax-error 'rule-source "expected a template, (bind …), or (jsonl path)" stx it)])))
+     #`(registry-add-setup! occur-registry
+                            (list (control (rule-source-msg 'name (flatten-items (list #,@items)) 'replace) #:config? #t)))]))
+
+(define (flatten-items xs) (append* (map (λ (x) (if (list? x) x (list x))) xs)))

@@ -20,6 +20,7 @@
                        "../private/join.rkt"
                        "../private/ops/output.rkt"
                        "../private/derive.rkt"
+                       "../private/rules-engine.rkt"
                        "../private/dataflow.rkt"
                        "../private/operator.rkt"
                        "../private/ops/stateless.rkt"
@@ -924,3 +925,30 @@
                                     (syntax-e #'n))
                             stx #'n))
       (stage-out* #'(merge-operator 2) (list (stage-ctx-prev ctx) #''n) (stage-ctx-shape ctx) (stage-ctx-key ctx))])))
+
+;; ===========================================================================
+;; Rules (spec §14)
+;;
+;; (rules): the rules node. It runs the rule instances in force on each key
+;; of a keyed stream, reading kinds and sub-streams through the source's
+;; keying, and emits RuleOutput events.
+
+(define rule-output-shape
+  (shape '((RuleOutput (rule . Any) (key . Any) (binding-key . Any) (target . Any) (reason . Any)
+                       (window . Any) (samples . Integer) (windows . Integer) (sources . Any)
+                       (params . Any) (emitted-at . Time) (identity . String) (summary . Any)))))
+
+(register-stage!
+ 'rules
+ (λ (stx ctx)
+   (syntax-parse stx
+     [(_)
+      (define key (stage-ctx-key ctx))
+      (unless key (raise-syntax-error 'rules "the rules node needs a keyed stream: a source #:key or (key-by attr)" stx))
+      (define ky (stage-ctx-keying ctx))
+      (define kind (and ky (hash-ref ky 'kind #f)))
+      (define sub (and ky (hash-ref ky 'substream #f)))
+      (stage-out* #`(rules-operator #:key #,key
+                                    #:kind #,(if kind #`(attribute-key-fn '#,kind) #'(λ (e) #f))
+                                    #:substream #,(if sub #`(attribute-key-fn '#,sub) #'(λ (e) #f)))
+                  #f rule-output-shape key)])))
