@@ -369,3 +369,24 @@
                        #rx"needs a #:where clause" 5)
   (check-compile-error (string-append pat-header "(define-pattern p #:from feed #:within 60 #:retain\n (late) (kleene+ (b : Swipe)) #:where (> (count b) 1))\n")
                        #rx"unknown output reason" 6))
+
+(require (only-in "lang/derive.rkt" [occur-run derive-run] [sent derive-sent]))
+
+(spec-test '(DR.view DR.closure DR.summary DR.output-identity DR.act DR.cycle-guard)
+           "derivation forms run as declared"
+  (define r (derive-run))
+  (check-equal? (map (λ (o) (list (output-at o) (event-attr (output-item o) 'key) (event-attr (output-item o) 'view)))
+                     (filter (λ (o) (eq? (output-node o) 'totals)) (run-result-outputs r)))
+                '((60 "d1" 3) (60 "d2" 5)))           ; the script ends at 75, before the next export
+  (check-equal? (view-ref r 'totals "d1") 6)
+  (check-equal? (map (λ (e) (event-level e)) (by-node r 'pair-windows)) '(2))
+  (check-equal? (map event-constituents (by-node r 'compact)) '(() () ()))   ; three pairs
+  (check-equal? (map event-id (by-node r 'once)) '("x1" "x2"))   ; the redelivery has the same content
+  (check-equal? (reverse (unbox derive-sent)) '(1 2 5 3))
+  (check-equal? (map (λ (e) (event-attr e 'result)) (by-node r 'alert)) '(ok ok ok ok))
+  ;; each reading, then its echo (one level deeper), then the bound stops it
+  (check-equal? (sort (map (λ (e) (event-attr e 'v)) (by-node r 'echo)) <) '(101 102 103 105 201 202 203 205)))
+
+(spec-test 'DR.cycle-guard "a stream that consumes itself without #:recursive is a compile-time error"
+  (check-compile-error (string-append header "(source feed #:types (Swipe))\n(define-stream s (from feed)\n (feedback s))\n")
+                       #rx"cycle guard: stream s consumes its own outputs" 5))

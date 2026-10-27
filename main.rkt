@@ -29,6 +29,7 @@
          "private/pattern/policies.rkt"
          "private/pattern/nfa.rkt"
          "private/ops/output.rkt"
+         "private/derive.rkt"
          (only-in "private/scheduler.rkt"
                   cron cron? cron-text parse-cron cron-matches? cron-next cron-prev cron-ticks-between))
 (provide (all-from-out "private/time.rkt")
@@ -55,4 +56,5 @@
          (all-from-out "private/pattern/policies.rkt")
          (all-from-out "private/pattern/nfa.rkt")
          (all-from-out "private/ops/output.rkt")
+         (all-from-out "private/derive.rkt")
          cron cron? cron-text parse-cron cron-matches? cron-next cron-prev cron-ticks-between)

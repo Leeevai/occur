@@ -19,6 +19,7 @@
                        "../private/aggregate.rkt"
                        "../private/join.rkt"
                        "../private/ops/output.rkt"
+                       "../private/derive.rkt"
                        "../private/dataflow.rkt"
                        "../private/operator.rkt"
                        "../private/ops/stateless.rkt"
@@ -26,6 +27,7 @@
                        "registry-param.rkt"))
 
 (provide stage-out*
+         current-recursive-bound
          window-spec->operator
          default-window-fields
          (struct-out stage-ctx)
@@ -57,6 +59,9 @@
   (set-stage-out-keying! o keying)
   (set-stage-out-last-only?! o last-only?)
   o)
+
+;; The #:recursive bound of the stream being compiled, if any.
+(define current-recursive-bound (make-parameter #f))
 
 (define stage-table (make-hasheq))
 (define (register-stage! name proc) (hash-set! stage-table name proc))
@@ -102,7 +107,8 @@
     (define sink? (and last? (not (stage-out-no-sink? out))))
     (define def
       #`(define #,node-id
-          (make-node '#,node-name #,(stage-out-op out) (list #,@inputs) #:sink? #,sink?)))
+          (make-node '#,node-name #,(stage-out-op out) (list #,@inputs) #:sink? #,sink?
+                     #:recursive #,(or (current-recursive-bound) #'#f))))
     (define extras (if (stage-out-extras out) ((stage-out-extras out) node-id) '()))
     (when (and (stage-out-last-only? out) (not last?))
       (raise-syntax-error 'define-stream "this stage must be the last stage of a stream" stg))
@@ -883,3 +889,38 @@
                                    #:report-leave? #,(if (attribute rl) #'rl #'#t)
                                    #:key #,(or (stage-ctx-key ctx) #'#f))
                   #f shp (stage-ctx-key ctx))])))
+
+;; ===========================================================================
+;; Derivation (spec §13)
+
+;; (summarize): replace each event's constituents with a summary.   DR.summary
+(register-stage!
+ 'summarize
+ (λ (stx ctx)
+   (syntax-parse stx
+     [(_) (stage-out* #'(map-like-summarize) #f (shape-with-fields (stage-ctx-shape ctx) '((summary . Any)))
+                      (stage-ctx-key ctx))])))
+
+;; (dedupe-outputs): drop events whose content identity was seen.   DR.output-identity
+(register-stage!
+ 'dedupe-outputs
+ (λ (stx ctx)
+   (syntax-parse stx
+     [(_) (stage-out* #'(identity-dedupe-operator) #f (stage-ctx-shape ctx) (stage-ctx-key ctx))])))
+
+;; (feedback name): also read the stream `name`, by name, so a stream can
+;; consume a later stream or itself. Cycles must be declared #:recursive
+;; with a bound (DR.cycle-guard); a direct self-loop without one is a
+;; compile-time error, and other loops are rejected when the program is
+;; built.
+(register-stage!
+ 'feedback
+ (λ (stx ctx)
+   (syntax-parse stx
+     [(_ n:id)
+      (when (and (eq? (syntax-e #'n) (stage-ctx-name ctx)) (not (current-recursive-bound)))
+        (raise-syntax-error 'define-stream
+                            (format "cycle guard: stream ~a consumes its own outputs; declare #:recursive with a termination bound"
+                                    (syntax-e #'n))
+                            stx #'n))
+      (stage-out* #'(merge-operator 2) (list (stage-ctx-prev ctx) #''n) (stage-ctx-shape ctx) (stage-ctx-key ctx))])))

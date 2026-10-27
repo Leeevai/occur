@@ -12,6 +12,7 @@
          "../private/context.rkt"
          "../private/pattern/ast.rkt"
          "../private/pattern/operators.rkt"
+         "../private/derive.rkt"
          (for-syntax racket/base
                      racket/list
                      racket/syntax
@@ -23,6 +24,8 @@
 
 (provide event-type
          define-pattern
+         define-view
+         act
          directory
          entries
          source
@@ -163,8 +166,10 @@
 
 (define-syntax (define-stream stx)
   (syntax-parse stx
-    [(_ name:id stage ...+)
-     (define-values (defs final shp key keying) (compile-stages #'name (syntax->list #'(stage ...))))
+    [(_ name:id (~optional (~seq #:recursive bound:exact-positive-integer)) stage ...+)
+     (define-values (defs final shp key keying)
+       (parameterize ([current-recursive-bound (and (attribute bound) (syntax-e #'bound))])
+         (compile-stages #'name (syntax->list #'(stage ...)))))
      (with-syntax ([(def ...) defs]
                    [final final]
                    [shape-datum (shape-types shp)]
@@ -405,4 +410,58 @@
                                  (list input) #:sink? #t))
            (define-syntax name (make-stream-static 'name (shape 'shape-datum) (quote-syntax rt)
                                                    #:key (quote-syntax key)))
+           (registry-add-node! occur-registry rt)))]))
+
+;; ---------------------------------------------------------------------------
+;; (define-view name #:from stream maybe-key #:init expr #:update expr maybe-export)   DR.view
+;; #:update sees `state`, `now`, `it`, and the event's attributes. The view is
+;; queried with (view-ref result 'name key) and, with #:export-every d,
+;; emits a View event per key every d of processing time.
+
+(define-syntax (define-view stx)
+  (syntax-parse stx
+    [(_ name:id (~alt (~once (~seq #:from up:id)) (~optional (~seq #:key k:id))
+                      (~once (~seq #:init init:expr)) (~once (~seq #:update upd:expr))
+                      (~optional (~seq #:export-every d:expr)))
+        ...)
+     (define v (lookup-upstream #'up))
+     (define shp (if (source-static? v) (apply type-shape (source-static-types v)) (stream-static-shape v)))
+     (define input (or (and (source-static? v) (source-static-head v)) (static-runtime-id v)))
+     (define keying (if (source-static? v) (source-static-keying v) (stream-static-keying v)))
+     (define key (cond [(attribute k) (check-attributes! 'define-view shp #'(k) stx) #'(attribute-key-fn 'k)]
+                       [(and keying (hash-ref keying 'entity #f)) => (λ (a) #`(attribute-key-fn '#,a))]
+                       [else #'#f]))
+     (with-syntax ([rt (format-id #'name "~a-view" #'name)]
+                   [update (let ([st (datum->syntax #'upd 'state)] [now (datum->syntax #'upd 'now)])
+                             #`(λ (#,st e #,now) (#,(event-lambda shp #'upd) e)))]
+                   [key key] [input input]
+                   [export (or (attribute d) #'#f)])
+       #'(begin
+           (define rt (make-node 'name (view-operator #:key key #:init (λ () init) #:update update
+                                                      #:export-every export)
+                                 (list input) #:sink? #t))
+           (define-syntax name (make-stream-static 'name (shape '((View (key . Any) (view . Any))))
+                                                   (quote-syntax rt) #:key (quote-syntax key)))
+           (registry-add-node! occur-registry rt)))]))
+
+;; ---------------------------------------------------------------------------
+;; (act name #:on stream #:do expr maybe-completion)                        DR.act
+;; Runs expr (seeing the event's attributes and it) for every event. With
+;; #:completion Type, emits a Type event with the result for each action.
+
+(define-syntax (act stx)
+  (syntax-parse stx
+    [(_ name:id (~alt (~once (~seq #:on up:id)) (~once (~seq #:do body:expr))
+                      (~optional (~seq #:completion t:id)))
+        ...)
+     (define v (lookup-upstream #'up))
+     (define shp (if (source-static? v) (apply type-shape (source-static-types v)) (stream-static-shape v)))
+     (define input (or (and (source-static? v) (source-static-head v)) (static-runtime-id v)))
+     (with-syntax ([rt (format-id #'name "~a-action" #'name)]
+                   [proc (event-lambda shp #'body)]
+                   [input input]
+                   [completion (if (attribute t) #''t #'#f)])
+       #'(begin
+           (define rt (make-node 'name (action-operator proc #:completion completion) (list input) #:sink? #t))
+           (define-syntax name (make-stream-static 'name (shape '((ActionCompleted (result . Any)))) (quote-syntax rt)))
            (registry-add-node! occur-registry rt)))]))

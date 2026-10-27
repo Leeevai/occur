@@ -186,3 +186,11 @@
   [classify-health (-> #:now time? #:last-arrival (or/c #f time?) #:newest time?
                        #:live duration? #:silent duration? #:stale duration?
                        (or/c 'live 'late 'quiet 'silent))]))
+
+;; The summarize stage: every event replaced by its summarized form.
+(define (map-like-summarize)
+  (stateless-operator 'summarize (λ (e c) (emit! c (summarize e)))))
+
+(provide
+ (contract-out
+  [map-like-summarize (-> operator?)]))
