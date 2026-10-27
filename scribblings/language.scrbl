@@ -9,6 +9,13 @@ against the declared sources and prints every output. The module also
 provides @racket[occur-program], @racket[occur-steps], and
 @racket[occur-run] for tests and other modules.
 
+A module that declares nothing to run (no source, stream, pattern,
+schedule, view, action, rule source, directory, script, or run options) is
+a @emph{library}: it exports only what it provides, such as event types,
+condition names, and macros that expand into declarations in the module
+that uses them. Several libraries can be required together;
+@filepath{lib/reflex.rkt} is one (see @secref["reflex"]).
+
 @codeblock|{
 #lang occur
 (event-type Swipe [card : String] [amount : Real])
@@ -45,7 +52,16 @@ Declares a source stream (@tt{ES.stream}) with its types and data. A
 stages. The first stage is @racket[(from upstream type ...)], which reads a
 source or another stream, optionally only some of its types.}
 
-@defform[(script step ...)
-         #:grammar ([step (at t source event) (advance-to t) (watermark source t)
+@defform[(script option ... step ...)
+         #:grammar ([option (code:line #:start t) (code:line #:final-watermark? bool)]
+                    [step (at t source event) (advance-to t) (watermark source t)
                           (suspend t1 t2) expr])]{Replaces the sources' data
-with an explicit script for the simulated processing clock.}
+with an explicit script for the simulated processing clock. With
+@racket[#:start], the clock starts at @racket[t] and the declarations'
+setup (directories, rule sources) takes effect then; with
+@racket[#:final-watermark? #f] the run ends without moving every watermark
+to +∞. An @racket[expr] step is any runtime step, such as
+@racket[(checkpoint)] or @racket[(rule-source-push 'name items)].}
+
+@defform[(run-options option ...)]{The options of @racket[script], for a
+module that runs on its sources' own data.}
