@@ -221,3 +221,10 @@
                                #:on-timer (λ (g s c) (emit! c (make-event 'Tick '() #:at (ctx-now c))) #f)))
   (define n (make-node 'eager eager (list src) #:sink? #t))
   (check-equal? (ats (run (make-program (list n)) (list (advance-to 50)))) '(10)))
+
+(test-case "each event carries its arrival sequence number at the node, counted over all keys"
+  (define seqs (make-operator 'seqs #:key (λ (e) (event-attr e 'k))
+                              #:on-event (λ (g s e c) (emit! c (make-event 'S `((seq . ,(ctx-seq c))) #:at 0)) s)))
+  (define n (make-node 'seqs seqs (list src) #:sink? #t))
+  (define r (run (make-program (list n)) (for/list ([k '(a b a)] [i (in-naturals)]) (arrive i 'in (ev (format "e~a" i) i `((k . ,k)))))))
+  (check-equal? (map (λ (e) (event-attr e 'seq)) (run-result-events r)) '(0 1 2)))

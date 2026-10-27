@@ -217,6 +217,7 @@
                 [outputs #:mutable]      ; reversed list of output
                 [outbox #:mutable]       ; reversed list of output awaiting delivery
                 [suspended? #:mutable]
+                [seqs #:mutable]         ; hasheq node -> number of events delivered so far
                 delivery
                 track-provenance?))
 
@@ -227,7 +228,7 @@
 (define (make-runner prog start delivery track-provenance?)
   (runner prog start (initial-states prog) empty-deadlines
           (for/hasheq ([name (in-hash-keys (program-nodes prog))]) (values name empty-deadlines))
-          (hasheq) (hasheq) (hasheq) '() (hasheq) (box 0) '() '() #f delivery track-provenance?))
+          (hasheq) (hasheq) (hasheq) '() (hasheq) (box 0) '() '() #f (hasheq) delivery track-provenance?))
 
 (define (W r name) (hash-ref (runner-wm r) name -inf.0))
 
@@ -245,9 +246,9 @@
 ;; Run one operator callback and absorb its effects. `f` receives the
 ;; context and returns the new per-key state (or #f to drop the key) for
 ;; key callbacks; global callbacks are handled by `with-global-callback`.
-(define (make-node-ctx r name key #:port [port 0] #:clock [clock #f])
+(define (make-node-ctx r name key #:port [port 0] #:clock [clock #f] #:seq [seq 0])
   (make-ctx #:node name #:key key #:port port #:clock clock
-            #:now (runner-now r) #:watermark (W r name)))
+            #:now (runner-now r) #:watermark (W r name) #:seq seq))
 
 (define (absorb-ctx! r name c)
   (bump-counters! r name (ctx-count-list c))
@@ -279,11 +280,12 @@
   (parameterize ([current-id-source (runner-ids r)]) (thunk)))
 
 ;; Run a per-key callback: (proc global kstate-or-#f ctx) -> kstate-or-#f.
-(define (key-callback! r name key proc #:port [port 0] #:clock [clock #f] #:create? [create? #t])
+(define (key-callback! r name key proc #:port [port 0] #:clock [clock #f] #:create? [create? #t]
+                       #:seq [seq 0])
   (define op (node-op* r name))
   (define st (hash-ref (runner-states r) name))
   (define g (car st))
-  (define c (make-node-ctx r name key #:port port #:clock clock))
+  (define c (make-node-ctx r name key #:port port #:clock clock #:seq seq))
   (define existing (hash-ref (cdr st) key #f))
   (define kstate (or existing (and create? (with-ids r (λ () ((operator-init-key op) g key c))))))
   (define new (with-ids r (λ () (proc g kstate c))))
@@ -338,7 +340,9 @@
         (bump-counters! r name (list (cons 'recursion-bound 1)))]
        [else
         (define key (if (operator-key op) ((operator-key op) e) #f))
-        (key-callback! r name key (λ (g s c) ((operator-on-event op) g s e c)) #:port port)
+        (define seq (hash-ref (runner-seqs r) name 0))
+        (set-runner-seqs! r (hash-set (runner-seqs r) name (add1 seq)))
+        (key-callback! r name key (λ (g s c) ((operator-on-event op) g s e c)) #:port port #:seq seq)
         (fire-event-timers! r name)])]
     [(retraction e)
      (cond

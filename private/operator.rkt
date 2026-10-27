@@ -77,12 +77,14 @@
 ;; The callback context. The runner creates one per callback and reads the
 ;; accumulated emissions, counter increments, and reports afterwards.
 
-(struct ctx (node key port clock now watermark
+;; seq is the arrival sequence number of the current event at this node,
+;; counted over all keys (0 for callbacks without an event).
+(struct ctx (node key port clock now watermark seq
                   [emitted #:mutable] [counts #:mutable] [reports #:mutable]))
 
 (define (make-ctx #:node node #:key key #:port [port 0] #:clock [clock #f]
-                  #:now now #:watermark watermark)
-  (ctx node key port clock now watermark '() '() '()))
+                  #:now now #:watermark watermark #:seq [seq 0])
+  (ctx node key port clock now watermark seq '() '() '()))
 
 (define (emit! c item [port 0])
   (set-ctx-emitted! c (cons (cons port item) (ctx-emitted c))))
@@ -134,8 +136,9 @@
                            operator?)]
   [ctx? (-> any/c boolean?)]
   [make-ctx (->* (#:node symbol? #:key any/c #:now time? #:watermark time?)
-                 (#:port exact-nonnegative-integer? #:clock (or/c #f symbol?))
+                 (#:port exact-nonnegative-integer? #:clock (or/c #f symbol?) #:seq exact-nonnegative-integer?)
                  ctx?)]
+  [ctx-seq (-> ctx? exact-nonnegative-integer?)]
   [ctx-node (-> ctx? symbol?)]
   [ctx-key (-> ctx? any/c)]
   [ctx-port (-> ctx? exact-nonnegative-integer?)]
