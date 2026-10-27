@@ -131,3 +131,11 @@
   (check-equal? (length (dedupe-outputs (filter (λ (o) (eq? (output-node o) 'triggers)) (run-result-outputs r)))) 4)
   ;; quiet's trigger, rebuilt by the replay, is dropped: its rule is gone
   (check-equal? (for/sum ([c (in-hash-values (run-result-counters r))]) (hash-ref c 'dropped-after-replay 0)) 1))
+
+(require (prefix-in converge: "../examples/reflex/converge.rkt"))
+
+(spec-test 'RL.converge "pushing an identical rule source changes nothing and emits nothing"
+  (define r (converge:occur-run))
+  ;; the progress at 10 survives the push: the trigger at 20 counts both
+  (check-equal? (triggers r) '((20 samples (10 20) 2 1 #hasheq())))
+  (check-equal? (run-result-reports r) '()))
