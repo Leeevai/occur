@@ -107,40 +107,40 @@ Status values: `todo`, `partial`, `done`.
 | `AL.finishes` | §10 | `(finishes? a b)` / `(allen-relation a b)` in stage and pattern expressions | `finishes?` `allen-relation` (private/allen.rkt) | tests/allen-test.rkt, tests/lang-test.rkt |  | partial |
 | `AL.finished-by` | §10 | `(finished-by? a b)` / `(allen-relation a b)` in stage and pattern expressions | `finished-by?` `allen-relation` (private/allen.rkt) | tests/allen-test.rkt, tests/lang-test.rkt |  | partial |
 | `AL.equals` | §10 | `(equals? a b)` / `(allen-relation a b)` in stage and pattern expressions | `equals?` `allen-relation` (private/allen.rkt) | tests/allen-test.rkt, tests/lang-test.rkt |  | partial |
-| `PT.sequence` | §11 | | | | | todo |
-| `PT.primitive` | §11 | | | | | todo |
-| `PT.activation` | §11 | | | | | todo |
-| `PT.conjunction` | §11 | | | | | todo |
-| `PT.disjunction` | §11 | | | | | todo |
-| `PT.negation` | §11 | | | | | todo |
-| `PT.absence` | §11 | | | | | todo |
-| `PT.span-absence` | §11 | | | | | todo |
-| `PT.kleene-plus` | §11 | | | | | todo |
-| `PT.kleene-star` | §11 | | | | | todo |
-| `PT.repeat` | §11 | | | | | todo |
-| `PT.any` | §11 | | | | | todo |
-| `PT.within` | §11 | | | | | todo |
-| `PT.where` | §11 | | | | | todo |
-| `PT.aperiodic` | §11 | | | | | todo |
-| `PT.aperiodic-cumulative` | §11 | | | | | todo |
-| `PT.periodic` | §11 | | | | | todo |
-| `PT.periodic-cumulative` | §11 | | | | | todo |
-| `PT.threshold` | §11 | | | | | todo |
-| `PT.trend.increasing` | §11 | | | | | todo |
-| `PT.trend.decreasing` | §11 | | | | | todo |
-| `PT.trend.non-increasing` | §11 | | | | | todo |
-| `PT.trend.non-decreasing` | §11 | | | | | todo |
-| `PT.trend.stable` | §11 | | | | | todo |
-| `PT.trend.mixed` | §11 | | | | | todo |
-| `PT.relative` | §11 | | | | | todo |
-| `PT.spatial.distance` | §11 | | | | | todo |
-| `PT.spatial.moving` | §11 | | | | | todo |
-| `PT.accumulate` | §11 | | | | | todo |
+| `PT.sequence` | §11 | `(seq P Q ...)` | `seq` `p:seq` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
+| `PT.primitive` | §11 | `(x : T pred)` / `(T pred)` / `T` | `prim` `p:primitive` (private/pattern/ast.rkt); oracle (private/pattern/reference.rkt) | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
+| `PT.activation` | §11 | `act` | `act` `p:act`; ACT at the instance's activation instant | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
+| `PT.conjunction` | §11 | `(and P Q ...)` | `conj` `p:and` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
+| `PT.disjunction` | §11 | `(or P Q ...)` | `disj` `p:or` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
+| `PT.negation` | §11 | `(seq P (absent Q) R)` | `neg-between` `p:neg-between` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
+| `PT.absence` | §11 | `(seq P (absent Q #:within d))` | `absence` `p:absence` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
+| `PT.span-absence` | §11 | `(unless P Q)` | `span-absence` `p:unless` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
+| `PT.kleene-plus` | §11 | `(kleene+ P)` | `kleene+` `p:repeat` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
+| `PT.kleene-star` | §11 | `(kleene* P)` | `kleene*` `p:repeat` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
+| `PT.repeat` | §11 | `(repeat P n m)` | `repeat` `p:repeat` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
+| `PT.any` | §11 | `(any k P ...)` | `any-of` `p:any` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
+| `PT.within` | §11 | `(within P d)` / `#:within d` | `within` `p:within` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
+| `PT.where` | §11 | `(where P θ)` / `#:where θ` | `where` `p:where`, where-helpers | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
+| `PT.aperiodic` | §11 | `(aperiodic S X E)` | `aperiodic` `p:aperiodic` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
+| `PT.aperiodic-cumulative` | §11 | `(aperiodic* S X E)` | `aperiodic*` `p:aperiodic` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
+| `PT.periodic` | §11 | `(periodic S d E)` | `periodic` `p:periodic` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
+| `PT.periodic-cumulative` | §11 | `(periodic* S d E)` | `periodic*` `p:periodic` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
+| `PT.threshold` | §11 | `crosses?` / `threshold-pattern` in `#:where` | `crosses?` `threshold-pattern` (private/pattern/families.rkt) | tests/families-test.rkt |  | partial |
+| `PT.trend.increasing` | §11 | `(increasing b.x)` in `#:where` | `increasing?` (private/pattern/families.rkt) | tests/families-test.rkt |  | partial |
+| `PT.trend.decreasing` | §11 | `(decreasing b.x)` | `decreasing?` | tests/families-test.rkt |  | partial |
+| `PT.trend.non-increasing` | §11 | `(non-increasing b.x)` | `non-increasing?` | tests/families-test.rkt |  | partial |
+| `PT.trend.non-decreasing` | §11 | `(non-decreasing b.x)` | `non-decreasing?` | tests/families-test.rkt |  | partial |
+| `PT.trend.stable` | §11 | `(stable b.x eps)` | `stable?` | tests/families-test.rkt |  | partial |
+| `PT.trend.mixed` | §11 | `(mixed b.x)` | `mixed?` `trend` | tests/families-test.rkt |  | partial |
+| `PT.relative` | §11 | `(relative-max? x xs)` in `#:where` | `relative-max?` `relative-min?` | tests/families-test.rkt |  | partial |
+| `PT.spatial.distance` | §11 | `within-distance?` `min-distance` ... in `#:where` | `within-distance?` `beyond-distance?` `min/max/avg-distance` | tests/families-test.rkt |  | partial |
+| `PT.spatial.moving` | §11 | `moving-toward?` `moving-away?` `constant-direction?` | (private/pattern/families.rkt) | tests/families-test.rkt |  | partial |
+| `PT.accumulate` | §11 | `accumulate-pattern`; Reflex `accumulate` (M17) | `accumulate-pattern` (private/pattern/families.rkt) | tests/families-test.rkt |  | partial |
 | `PT.flush` | §11 | | | | | todo |
-| `PT.silence` | §11 | | | | | todo |
-| `PT.recovery` | §11 | | | | | todo |
-| `PT.window-close` | §11 | | | | | todo |
-| `PT.schedule` | §11 | | | | | todo |
+| `PT.silence` | §11 | `silence-pattern`; Reflex `silence` (M17) | `silence-pattern` | tests/families-test.rkt |  | partial |
+| `PT.recovery` | §11 | `recovery-pattern` | `recovery-pattern` | tests/families-test.rkt |  | partial |
+| `PT.window-close` | §11 | Reflex `window` (M17) | `window-close-operator` (private/pattern/families.rkt) | tests/families-test.rkt |  | partial |
+| `PT.schedule` | §11 | `(window (calendar "cron"))`, `define-schedule` | `calendar-window-operator` (private/window.rkt) | tests/families-test.rkt |  | partial |
 | `SEL.next` | §12 | | | | | todo |
 | `SEL.strict` | §12 | | | | | todo |
 | `SEL.partition` | §12 | | | | | todo |
