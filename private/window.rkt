@@ -168,7 +168,8 @@
                 (if (win-fired w) (+ (win-end w) lateness) (win-end w)))
               (if (and fire-empty? (grid-state-next st)) (list (+ (grid-state-next st) size)) '())))
     (and (pair? cands) (apply min cands)))
-  (make-operator
+  (define op
+   (make-operator
    'window
    #:monotone? #f
    #:key key
@@ -183,7 +184,28 @@
      (if keyed? (fire st2 c) st2))
    #:event-deadline (λ (st) (and (eq? closer 'watermark) (next-deadline st)))
    #:deadline (λ (st) (and processing? (next-deadline st)))
-   #:on-timer (λ (gl st c) (fire st c))))
+   #:on-timer (λ (gl st c) (fire st c))
+   ;; TM.retraction: a window that has not fired forgets the retracted event
+   ;; (removing it, or refolding what is left), and one left empty is
+   ;; dropped; the runner retracts the windows that already fired with it
+   #:on-retract (λ (gl st e c) (and st (forget st e)))))
+  (define (forget st e)
+    (define id (event-id e))
+    (define ws
+      (for*/hash ([(s w) (in-hash (grid-state-windows st))]
+                  [held? (in-value (and (not (win-fired w)) (for/or ([x (win-contents w)]) (equal? (event-id x) id))))]
+                  [left (in-value (if held? (filter (λ (x) (not (equal? (event-id x) id))) (win-contents w)) (win-contents w)))]
+                  #:unless (and held? (null? left) (not fire-empty?)))
+        (values s (if held?
+                      (struct-copy win w [contents left]
+                                   [acc (if (accumulator-remove acc)
+                                            ((accumulator-remove acc) (win-acc w)
+                                                                      (findf (λ (x) (equal? (event-id x) id)) (win-contents w)))
+                                            (for/fold ([a ((accumulator-init acc))]) ([x (in-list (reverse left))])
+                                              ((accumulator-add acc) a x)))])
+                      w))))
+    (struct-copy grid-state st [windows ws]))
+  op)
 
 (provide
  (contract-out

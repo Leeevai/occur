@@ -261,7 +261,18 @@
                  (list (arrive 1 'in (make-event 'X '() #:id "a" #:at 1))
                        (arrive 2 'in (make-event 'X '() #:id "b" #:at 2))
                        (arrive 3 'in (retraction (make-event 'X '() #:id "a" #:at 1))))))
-  ;; the delay releases only b; the window that held a is retracted with it
+  ;; the delay releases only b; the open window forgets a and fires with b
   (check-equal? (map event-id (run-result-events r 'held)) '("b"))
-  (check-equal? (run-result-events r 'win) '())
-  (check-equal? (list (run-result-counter r 'held 'retracted) (run-result-counter r 'win 'retracted)) '(1 1)))
+  (check-equal? (map (λ (w) (map event-id (event-constituents w))) (run-result-events r 'win)) '(("b")))
+  (check-equal? (run-result-counter r 'held 'retracted) 1))
+
+(spec-test '(DR.retract TM.retraction WN.tumbling) "a window that already fired is retracted with a retracted event"
+  (define s (make-source 'in #:watermark 'ascending))
+  (define win (make-node 'win (grid-window-operator (tumbling 10) contents-accumulator) (list s) #:sink? #t))
+  (define r (run (make-program (list win))
+                 (list (arrive 1 'in (make-event 'X '() #:id "a" #:at 1))
+                       (arrive 12 'in (make-event 'X '() #:id "b" #:at 12))     ; [0, 10) fires
+                       (arrive 13 'in (retraction (make-event 'X '() #:id "a" #:at 1))))))
+  (define items (map output-item (run-result-outputs r)))
+  (check-equal? (map (λ (x) (if (retraction? x) (list '⊖ (event-ts (retraction-event x))) (event-ts x))) items)
+                '(0 (⊖ 0) 10)))
