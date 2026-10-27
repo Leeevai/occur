@@ -44,3 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   lateness with corrections; windows closing on the processing clock or
   under keyed watermarks; temporal, segmentation, spatial, state, composite,
   and entity-lifecycle contexts with activation signals; directories.
+- Aggregation (M7): distributive, algebraic, holistic, and approximate
+  aggregates (HyperLogLog, t-digest, Count-Min on a deterministic hash),
+  incremental maintenance with remove, two-stack queues, and monotonic
+  deques, and the `(aggregate ...)` stage fused with windows.
