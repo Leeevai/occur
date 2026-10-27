@@ -11,19 +11,19 @@ Status values: `todo`, `partial`, `done`.
 
 | ID | § | Surface form | Runtime function | Tests | Example | Status |
 |---|---|---|---|---|---|---|
-| `ES.time` | §2 | `seconds` `minutes` `hours` `days` `utc` (available in `#lang occur`) | `time?` `interval` `utc` (private/time.rkt) | tests/time-test.rkt |  | partial |
-| `ES.type` | §2 | `(event-type T [a : D] ...)` | `make-event-type` `payload-problem` (private/event.rkt) | tests/event-test.rkt, tests/lang-test.rkt |  | partial |
-| `ES.event` | §2 | `(T #:at t [a v] ...)` constructor | `make-event` `event-attr` (private/event.rkt) | tests/event-test.rkt, tests/lang-test.rkt |  | partial |
+| `ES.time` | §2 | `seconds` `minutes` `hours` `days` `utc` (available in `#lang occur`) | `time?` `interval` `utc` (private/time.rkt) | tests/time-test.rkt | `examples/card-testing.rkt` | done |
+| `ES.type` | §2 | `(event-type T [a : D] ...)` | `make-event-type` `payload-problem` (private/event.rkt) | tests/event-test.rkt, tests/lang-test.rkt | `examples/card-testing.rkt` | done |
+| `ES.event` | §2 | `(T #:at t [a v] ...)` constructor | `make-event` `event-attr` (private/event.rkt) | tests/event-test.rkt, tests/lang-test.rkt | `examples/card-testing.rkt` | done |
 | `ES.batch` | §2 | (M2) `#:n` in source data | `make-batch-event` `batch-share` (private/event.rkt) | tests/batch-test.rkt |  | partial |
 | `ES.reference` | §2 | (M2) | `make-reference-event` `store-read` (private/event.rkt) | tests/reference-test.rkt |  | partial |
-| `ES.composite` | §2 | (M10) `#:emit` | `make-composite` (private/event.rkt) | tests/composite-test.rkt |  | partial |
+| `ES.composite` | §2 | `#:emit (T [a e] ...)` in `define-pattern` derives a composite event; `event-constituents` | `make-composite` (private/event.rkt), `derive-match` (private/pattern/operators.rkt) | tests/composite-test.rkt, tests/card-testing-test.rkt | `examples/card-testing.rkt` | done |
 | `ES.space` | §2 | compile-time schema checks in `event-type`, `source`, constructors | `event-space-member?` `event-level` (private/event.rkt) | tests/space-test.rkt, tests/lang-test.rkt |  | partial |
 | `ES.precedes` | §2 | (M9) `(precedes a b)` in `#:where` | `precedes?` (private/relations.rkt) | tests/relations-test.rkt |  | partial |
 | `ES.membership` | §2 | (M13) | `constituent-of?` `provenance` `member*?` (private/relations.rkt) | tests/relations-test.rkt |  | partial |
 | `ES.causality` | §2 | (M13) | `causality-from-events` `causes?` (private/relations.rkt) | tests/relations-test.rkt |  | partial |
-| `ES.stream` | §2 | `(source s #:types (T ...) #:from ...)` | `make-event-stream` (private/stream.rkt) | tests/stream-test.rkt, tests/io-test.rkt, tests/lang-test.rkt |  | partial |
+| `ES.stream` | §2 | `(source s #:types (T ...) #:from ...)` | `make-event-stream` (private/stream.rkt) | tests/stream-test.rkt, tests/io-test.rkt, tests/lang-test.rkt | `examples/card-testing.rkt` | done |
 | `ES.history` | §2 | (M2) | `history` (private/stream.rkt) | tests/stream-test.rkt |  | partial |
-| `ES.keyed` | §2 | `(key-by attr)`; source `#:key` | `partition-stream` (private/stream.rkt) | tests/stream-test.rkt, tests/keyed-prop-test.rkt |  | partial |
+| `ES.keyed` | §2 | `(key-by attr)`; source `#:key` | `partition-stream` (private/stream.rkt) | tests/stream-test.rkt, tests/keyed-prop-test.rkt | `examples/card-testing.rkt` | done |
 | `ES.substream` | §2 | source `#:key` `#:substream` `#:kind` | `attribute-keying` `watching` (private/stream.rkt) | tests/stream-test.rkt, tests/lang-test.rkt |  | partial |
 | `ES.operator` | §2 | `define-stream` stages compile to operators | `make-operator` `run-operator` (private/operator.rkt, private/dataflow.rkt) | tests/operator-test.rkt, tests/dataflow-test.rkt |  | partial |
 | `OP.filter` | §4 | `(filter expr)` stage | `filter-operator` (private/ops/stateless.rkt) | tests/stateless-test.rkt, tests/stateless-prop-test.rkt, tests/lang-test.rkt |  | partial |
@@ -43,7 +43,7 @@ Status values: `todo`, `partial`, `done`.
 | `TM.keyed-watermark` | §6 | `(keyed-watermark #:kinds (...) #:mode any/all)` stage | `keyed-wm-any` `keyed-wm-all` `keyed-watermark-operator` (private/progress.rkt) | tests/progress-test.rkt, tests/lang-test.rkt |  | partial |
 | `TM.event-time` | §6 | event time is the default clock; `#:clock event-time` | `delay-operator`, watermarks (private/progress.rkt, private/dataflow.rkt) | tests/progress-test.rkt |  | partial |
 | `TM.processing-time` | §6 | `(script ...)`; `#:clock processing-time` | `run` `simulated-clock` (private/dataflow.rkt) | tests/progress-test.rkt, tests/lang-test.rkt |  | partial |
-| `TM.watermark` | §6 | source `#:watermark none / ascending / (bounded-delay d) / (heartbeat T)`; script `(watermark s t)` | `watermark-to`, source strategies (private/dataflow.rkt) | tests/dataflow-test.rkt, tests/progress-test.rkt, tests/lang-test.rkt |  | partial |
+| `TM.watermark` | §6 | source `#:watermark none / ascending / (bounded-delay d) / (heartbeat T)`; script `(watermark s t)` | `watermark-to`, source strategies (private/dataflow.rkt) | tests/dataflow-test.rkt, tests/progress-test.rkt, tests/lang-test.rkt, tests/card-testing-test.rkt | `examples/card-testing.rkt` | done |
 | `TM.idle` | §6 | `(idle d #:clock processing-time/hybrid)` stage; `(heartbeat T)` watermarks | `idle-operator` (private/progress.rkt) | tests/progress-test.rkt, tests/lang-test.rkt |  | partial |
 | `TM.skew-guard` | §6 | `(skew-guard B)` stage; source `#:skew-guard B` | `skew-guard-operator` (private/progress.rkt) | tests/progress-test.rkt, tests/lang-test.rkt |  | partial |
 | `TM.timer` | §6 | `(delay d #:clock c)` stage | `delay-operator`, operator deadlines (private/progress.rkt, private/dataflow.rkt) | tests/dataflow-test.rkt, tests/progress-test.rkt, tests/lang-test.rkt |  | partial |
@@ -107,20 +107,20 @@ Status values: `todo`, `partial`, `done`.
 | `AL.finishes` | §10 | `(finishes? a b)` / `(allen-relation a b)` in stage and pattern expressions | `finishes?` `allen-relation` (private/allen.rkt) | tests/allen-test.rkt, tests/lang-test.rkt |  | partial |
 | `AL.finished-by` | §10 | `(finished-by? a b)` / `(allen-relation a b)` in stage and pattern expressions | `finished-by?` `allen-relation` (private/allen.rkt) | tests/allen-test.rkt, tests/lang-test.rkt |  | partial |
 | `AL.equals` | §10 | `(equals? a b)` / `(allen-relation a b)` in stage and pattern expressions | `equals?` `allen-relation` (private/allen.rkt) | tests/allen-test.rkt, tests/lang-test.rkt |  | partial |
-| `PT.sequence` | §11 | `(seq P Q ...)` | `seq` `p:seq` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
-| `PT.primitive` | §11 | `(x : T pred)` / `(T pred)` / `T` | `prim` `p:primitive` (private/pattern/ast.rkt); oracle (private/pattern/reference.rkt) | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
+| `PT.sequence` | §11 | `(seq P Q ...)` | `seq` `p:seq` | tests/reference-oracle-test.rkt, tests/lang-test.rkt, tests/card-testing-test.rkt | `examples/card-testing.rkt` | done |
+| `PT.primitive` | §11 | `(x : T pred)` / `(T pred)` / `T` | `prim` `p:primitive` (private/pattern/ast.rkt); oracle (private/pattern/reference.rkt) | tests/reference-oracle-test.rkt, tests/lang-test.rkt, tests/card-testing-test.rkt | `examples/card-testing.rkt` | done |
 | `PT.activation` | §11 | `act` | `act` `p:act`; ACT at the instance's activation instant | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
 | `PT.conjunction` | §11 | `(and P Q ...)` | `conj` `p:and` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
 | `PT.disjunction` | §11 | `(or P Q ...)` | `disj` `p:or` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
-| `PT.negation` | §11 | `(seq P (absent Q) R)` | `neg-between` `p:neg-between` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
+| `PT.negation` | §11 | `(seq P (absent Q) R)` | `neg-between` `p:neg-between` | tests/reference-oracle-test.rkt, tests/lang-test.rkt, tests/card-testing-test.rkt | `examples/card-testing.rkt` | done |
 | `PT.absence` | §11 | `(seq P (absent Q #:within d))` | `absence` `p:absence` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
-| `PT.span-absence` | §11 | `(unless P Q)` | `span-absence` `p:unless` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
-| `PT.kleene-plus` | §11 | `(kleene+ P)` | `kleene+` `p:repeat` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
+| `PT.span-absence` | §11 | `(unless P Q)` | `span-absence` `p:unless` | tests/reference-oracle-test.rkt, tests/lang-test.rkt, tests/card-testing-test.rkt | `examples/card-testing.rkt` | done |
+| `PT.kleene-plus` | §11 | `(kleene+ P)` | `kleene+` `p:repeat` | tests/reference-oracle-test.rkt, tests/lang-test.rkt, tests/card-testing-test.rkt | `examples/card-testing.rkt` | done |
 | `PT.kleene-star` | §11 | `(kleene* P)` | `kleene*` `p:repeat` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
 | `PT.repeat` | §11 | `(repeat P n m)` | `repeat` `p:repeat` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
 | `PT.any` | §11 | `(any k P ...)` | `any-of` `p:any` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
-| `PT.within` | §11 | `(within P d)` / `#:within d` | `within` `p:within` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
-| `PT.where` | §11 | `(where P θ)` / `#:where θ` | `where` `p:where`, where-helpers | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
+| `PT.within` | §11 | `(within P d)` / `#:within d` | `within` `p:within` | tests/reference-oracle-test.rkt, tests/lang-test.rkt, tests/card-testing-test.rkt | `examples/card-testing.rkt` | done |
+| `PT.where` | §11 | `(where P θ)` / `#:where θ` | `where` `p:where`, where-helpers | tests/reference-oracle-test.rkt, tests/lang-test.rkt, tests/card-testing-test.rkt | `examples/card-testing.rkt` | done |
 | `PT.aperiodic` | §11 | `(aperiodic S X E)` | `aperiodic` `p:aperiodic` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
 | `PT.aperiodic-cumulative` | §11 | `(aperiodic* S X E)` | `aperiodic*` `p:aperiodic` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
 | `PT.periodic` | §11 | `(periodic S d E)` | `periodic` `p:periodic` | tests/reference-oracle-test.rkt, tests/lang-test.rkt |  | partial |
@@ -141,14 +141,14 @@ Status values: `todo`, `partial`, `done`.
 | `PT.recovery` | §11 | `(pt:silence ... #:recovery #t)`; `recovery-pattern` | silence condition, `recovery-pattern` | tests/families-test.rkt, tests/reflex-traces-runtime-test.rkt |  | partial |
 | `PT.window-close` | §11 | `(pt:window-close #:size w #:offset o #:mode all)` | window-close condition (private/rules-engine.rkt), `window-close-operator` (private/pattern/families.rkt) | tests/families-test.rkt, tests/reflex-traces-runtime-test.rkt |  | partial |
 | `PT.schedule` | §11 | `(pt:schedule "cron")`, `(window (calendar "cron"))`, `define-schedule` | schedule condition (private/rules-engine.rkt), `calendar-window-operator` | tests/families-test.rkt, tests/reflex-traces-runtime-test.rkt |  | partial |
-| `SEL.next` | §12 | `#:selection next` / `skip-till-next-match` | `strategy-check` (private/pattern/policies.rkt) | tests/selection-test.rkt, tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
-| `SEL.strict` | §12 | `#:selection strict` | `strategy-check` registered with the engine; `select-matches` (private/pattern/policies.rkt) | tests/selection-test.rkt, tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
-| `SEL.partition` | §12 | `#:selection partition` | `strategy-check` (private/pattern/policies.rkt) | tests/selection-test.rkt, tests/lang-test.rkt |  | partial |
-| `SEL.any` | §12 | `#:selection any` (default) | engine delta joins (private/pattern/nfa.rkt) | tests/nfa-test.rkt, tests/selection-test.rkt |  | partial |
+| `SEL.next` | §12 | `#:selection next` / `skip-till-next-match` | `strategy-check` (private/pattern/policies.rkt) | tests/selection-test.rkt, tests/policies-test.rkt, tests/lang-test.rkt, tests/card-testing-test.rkt | `examples/card-testing.rkt` | done |
+| `SEL.strict` | §12 | `#:selection strict` | `strategy-check` registered with the engine; `select-matches` with `#:global-index` (private/pattern/policies.rkt) | tests/selection-test.rkt, tests/policies-test.rkt, tests/lang-test.rkt, tests/card-testing-test.rkt | `examples/card-testing.rkt` | done |
+| `SEL.partition` | §12 | `#:selection partition` | `strategy-check` (private/pattern/policies.rkt) | tests/selection-test.rkt, tests/lang-test.rkt, tests/card-testing-test.rkt | `examples/card-testing.rkt` | done |
+| `SEL.any` | §12 | `#:selection any` (default) | engine delta joins (private/pattern/nfa.rkt) | tests/nfa-test.rkt, tests/selection-test.rkt, tests/card-testing-test.rkt | `examples/card-testing.rkt` | done |
 | `CON.cumulative` | §12 | `#:consumption cumulative` | policy layer | tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
 | `CON.retain` | §12 | `#:retain (timeout)` | `make-match-policy #:retain` | tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
 | `CON.recent` | §12 | `#:consumption recent` | policy layer, `initial-leaves` | tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
-| `CON.unrestricted` | §12 | `#:consumption unrestricted` (default) | policy layer (private/pattern/policies.rkt) | tests/policies-test.rkt, tests/nfa-test.rkt |  | partial |
+| `CON.unrestricted` | §12 | `#:consumption unrestricted` (default) | policy layer (private/pattern/policies.rkt) | tests/policies-test.rkt, tests/nfa-test.rkt, tests/card-testing-test.rkt | `examples/card-testing.rkt` | done |
 | `CON.chronicle` | §12 | `#:consumption chronicle` | policy layer | tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
 | `CON.continuous` | §12 | `#:consumption continuous` | policy layer | tests/policies-test.rkt |  | partial |
 | `OUT.rate-limit` | §12 | `(rate-limit d #:mode drop/defer)` stage | `rate-limit-operator` (private/ops/output.rkt) | tests/output-test.rkt, tests/lang-test.rkt |  | partial |
@@ -156,20 +156,20 @@ Status values: `todo`, `partial`, `done`.
 | `OUT.first` | §12 | `#:output first` | policy layer | tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
 | `OUT.timeout-partial` | §12 | `#:timeout-partial (d clock)` | `policy-partials` (private/pattern/policies.rkt) | tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
 | `OUT.edge` | §12 | `(edge #:enter e #:leave e)` stage | `edge-operator` (private/ops/output.rkt) | tests/output-test.rkt, tests/lang-test.rkt |  | partial |
-| `OUT.every` | §12 | `#:output every` (default) | policy layer | tests/policies-test.rkt, tests/nfa-test.rkt |  | partial |
+| `OUT.every` | §12 | `#:output every` (default) | policy layer | tests/policies-test.rkt, tests/nfa-test.rkt, tests/card-testing-test.rkt | `examples/card-testing.rkt` | done |
 | `OUT.last` | §12 | `#:output last` | policy layer | tests/policies-test.rkt |  | partial |
-| `OUT.maximal` | §12 | `#:output maximal` | policy layer | tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
+| `OUT.maximal` | §12 | `#:output maximal` | policy layer; `maximal-matches` for the oracle (private/pattern/policies.rkt) | tests/policies-test.rkt, tests/lang-test.rkt, tests/card-testing-test.rkt | `examples/card-testing.rkt` | done |
 | `SKIP.no-skip` | §12 | `#:skip no-skip` (default) | `skip-range` (private/pattern/policies.rkt) | tests/policies-test.rkt |  | partial |
 | `SKIP.to-next` | §12 | `#:skip to-next` | `skip-range` | tests/policies-test.rkt |  | partial |
 | `SKIP.past-last` | §12 | `#:skip past-last` | `skip-range` | tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
 | `SKIP.to-first` | §12 | `#:skip (to-first x)` | `skip-range` | tests/policies-test.rkt |  | partial |
 | `SKIP.to-last` | §12 | `#:skip (to-last x)` | `skip-range` | tests/policies-test.rkt |  | partial |
 | `EVAL.immediate` | §12 | `#:eval immediate` (compile-time check: monotone only) | policy layer | tests/policies-test.rkt, tests/lang-test.rkt |  | partial |
-| `EVAL.deferred` | §12 | `#:eval deferred`; forced by last/maximal | engine deferred nodes, policy releases | tests/nfa-test.rkt, tests/policies-test.rkt |  | partial |
+| `EVAL.deferred` | §12 | `#:eval deferred`; forced by last/maximal | engine deferred nodes, policy releases | tests/nfa-test.rkt, tests/policies-test.rkt, tests/card-testing-test.rkt | `examples/card-testing.rkt` | done |
 | `DR.summary` | §13 | `(summarize)` stage | `summarize` `summarized-output` `make-summary` (private/derive.rkt) | tests/derive-test.rkt, tests/lang-test.rkt |  | partial |
 | `DR.view` | §13 | `(define-view ...)`, `view-ref`, `classify-health` | `view-operator` `view-ref` `classify-health` (private/derive.rkt) | tests/derive-test.rkt, tests/lang-test.rkt |  | partial |
 | `DR.output-identity` | §13 | `(dedupe-outputs)` stage | `output-identity` `event-identity` `dedupe-outputs` (private/derive.rkt) | tests/derive-test.rkt, tests/lang-test.rkt, tests/checkpoint-test.rkt |  | partial |
-| `DR.derive` | §13 | `#:emit (T [a e] ...)` in `define-pattern` | `derive-match` (private/pattern/operators.rkt) | tests/derive-test.rkt, tests/lang-test.rkt |  | partial |
+| `DR.derive` | §13 | `#:emit (T [a e] ...)` in `define-pattern` | `derive-match` (private/pattern/operators.rkt) | tests/derive-test.rkt, tests/lang-test.rkt, tests/card-testing-test.rkt | `examples/card-testing.rkt` | done |
 | `DR.ordered` | §13 | delivery grouped by key per instant (runner) | `flush-outbox!` (private/dataflow.rkt), `delivery-groups` (private/derive.rkt) | tests/derive-test.rkt, tests/lang-test.rkt |  | partial |
 | `DR.closure` | §13 | any stage or pattern reads derived streams | programs over nodes (private/dataflow.rkt) | tests/derive-test.rkt, tests/lang-test.rkt |  | partial |
 | `DR.cycle-guard` | §13 | `(feedback s)` stage, `#:recursive n` | `make-program` cycle check, recursive bound (private/dataflow.rkt) | tests/dataflow-test.rkt, tests/lang-test.rkt |  | partial |
