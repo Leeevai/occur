@@ -13,7 +13,8 @@
          racket/math
          "time.rkt"
          "event.rkt"
-         "operator.rkt")
+         "operator.rkt"
+         "dataflow.rkt")
 
 ;; ===========================================================================
 ;; Assigners: init -> s; assign : s e ctx -> (values s (listof instance-id))
@@ -160,3 +161,118 @@
   [entity-distance-context (->* ((-> any/c (or/c #f location?)) (-> list?) real?) (#:location symbol?) assigner?)]
   [event-distance-context (->* ((-> event? any/c) real? duration?) (#:location symbol?) assigner?)]
   [composite-context (->* () () #:rest (listof assigner?) assigner?)]))
+
+;; ===========================================================================
+;; CX.state: the operator is active only while an external state holds. Data
+;; arrives on port 0; state events arrive on port 1 and set the state to
+;; (active? e). While the state holds, data events pass, tagged with the
+;; episode (the id of the state event that began it); otherwise they are
+;; counted and dropped.
+
+(define (state-context-operator active? #:key [key #f])
+  (make-operator
+   'context:state
+   #:arity 2
+   #:key key
+   ;; 'inactive, or (list 'active id) with the id of the episode's opening event
+   #:init-key (λ (g k c) 'inactive)
+   #:on-event (λ (g st e c)
+                (cond
+                  [(= (ctx-port c) 1)
+                   (cond [(not (active? e)) 'inactive]
+                         [(pair? st) st]                       ; already active: same episode
+                         [else (list 'active (event-id e))])]
+                  [(pair? st) (emit! c (in-context e (list 'state (cadr st)))) st]
+                  [else (count! c 'inactive) st]))))
+
+;; ===========================================================================
+;; CX.entity and CX.activation: the entity lifecycle.
+;;
+;; The set of keys comes from a reference directory, not only from the
+;; data. A directory push replaces the directory whole or patches it per
+;; entity. An entity listed as active is activated at once, before it sends
+;; anything: a lifecycle signal `activate` flows downstream carrying the
+;; activation instant, the moment the context instance begins (CX.activation).
+;; An entity marked inactive (deprecated) has its state dropped (signal
+;; `drop`), and its later events are ignored and counted. An entity removed
+;; from the directory has its state dropped; if it sends data again it is
+;; activated afresh. Entities unknown to the directory are activated by their
+;; first event.
+
+(struct directory-msg (name entries mode) #:transparent)   ; entries: hash key -> 'active | 'inactive | 'removed
+
+(define (directory-entries->hash entries)
+  (cond [(hash? entries) entries]
+        [else (for/hash ([p (in-list entries)]) (values (car p) (cdr p)))]))
+
+(define (directory-push name entries #:mode [mode 'replace] #:at [t #f])
+  (control (directory-msg name (directory-entries->hash entries) mode) #:at t))
+
+(define (entity-context-operator directory-name #:key key)
+  (define (activate! c k) (emit! c (signal 'activate k (ctx-now c) #f)))
+  (make-operator
+   'context:entity
+   #:key key
+   #:monotone? #f
+   #:init-global (λ () (hash))                    ; key -> 'active | 'inactive
+   #:init-key (λ (g k c) 'new)                    ; 'new, or the activation instant
+   #:on-event
+   (λ (dir s e c)
+     (define k (ctx-key c))
+     (cond
+       [(eq? (hash-ref dir k #f) 'inactive) (count! c 'ignored) s]
+       [else
+        (define s2 (if (eq? s 'new) (begin (activate! c k) (ctx-now c)) s))
+        (emit! c e)
+        s2]))
+   #:on-control
+   (λ (dir keys msg c)
+     (cond
+       [(and (directory-msg? msg) (equal? (directory-msg-name msg) directory-name))
+        (define entries (directory-msg-entries msg))
+        (define new-dir
+          (if (eq? (directory-msg-mode msg) 'replace)
+              (for/hash ([(k v) (in-hash entries)] #:unless (eq? v 'removed)) (values k v))
+              (for/fold ([d dir]) ([(k v) (in-hash entries)])
+                (if (eq? v 'removed) (hash-remove d k) (hash-set d k v)))))
+        (define all-keys (remove-duplicates (append (sort-keys (hash-keys dir)) (sort-keys (hash-keys new-dir)))))
+        (define keys2
+          (for/fold ([ks keys]) ([k (in-list all-keys)])
+            (define old (hash-ref dir k #f))
+            (define new (hash-ref new-dir k #f))
+            (cond
+              [(and (eq? new 'active) (not (eq? old 'active)))
+               (activate! c k)
+               (hash-set ks k (ctx-now c))]
+              [(and (eq? new 'inactive) (not (eq? old 'inactive)))
+               (emit! c (signal 'drop k (ctx-now c) 'deprecated))
+               (hash-remove ks k)]
+              [(and (not new) old)
+               (emit! c (signal 'drop k (ctx-now c) 'removed))
+               (hash-remove ks k)]
+              [else ks])))
+        (values new-dir keys2)]
+       [else (values dir keys)]))))
+
+(define (sort-keys ks) (sort ks (λ (a b) (string<? (format "~s" a) (format "~s" b)))))
+
+;; Observe activations: every `activate` signal becomes an Activated event
+;; at the activation instant.
+(define activations-operator
+  (make-operator
+   'activations
+   #:on-event (λ (g s e c) s)
+   #:on-signal (λ (g s sig c)
+                 (when (eq? (signal-kind sig) 'activate)
+                   (emit! c (make-event 'Activated `((key . ,(signal-key sig)))
+                                        #:at (signal-time sig) #:src 'activation)))
+                 s)))
+
+(provide
+ (contract-out
+  [state-context-operator (->* ((-> event? any/c)) (#:key (or/c #f (-> event? any/c))) operator?)]
+  [struct directory-msg ([name any/c] [entries hash?] [mode (or/c 'replace 'patch)])]
+  [directory-push (->* (any/c (or/c hash? list?)) (#:mode (or/c 'replace 'patch) #:at (or/c #f time?))
+                      step:control?)]
+  [entity-context-operator (-> any/c #:key (-> event? any/c) operator?)]
+  [activations-operator operator?]))

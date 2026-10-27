@@ -59,3 +59,58 @@
   (define a (composite-context (segmentation-context '(customer)) (sliding-interval-context 3600 3600)))
   (check-equal? (ctxs (run-ctx a (list (ev "a" 100 '((customer . "c1"))) (ev "b" 4000 '((customer . "c1"))))))
                 '(("a" ((segment "c1") (sliding 0 3600))) ("b" ((segment "c1") (sliding 3600 7200))))))
+
+(spec-test 'CX.state "the operator is active only while the external state holds"
+  (define data (make-source 'data))
+  (define state (make-source 'state))
+  (define n (make-node 'during (state-context-operator (λ (e) (equal? (event-attr e 'status) "on")))
+                       (list data state) #:sink? #t))
+  (define r (run (make-program (list n))
+                 (list (arrive 1 'data (ev "a" 1)) (arrive 2 'state (ev "m1" 2 '((status . "on"))))
+                       (arrive 3 'data (ev "b" 3)) (arrive 4 'data (ev "c" 4))
+                       (arrive 5 'state (ev "m2" 5 '((status . "off")))) (arrive 6 'data (ev "d" 6)))))
+  (check-equal? (ctxs r) '(("b" (state "m1")) ("c" (state "m1"))))
+  (check-equal? (run-result-counter r 'during 'inactive) 2))
+
+(define (dev id t d) (ev id t `((device . ,d))))
+
+(define (entity-run steps)
+  (define src (make-source 'in))
+  (define gate (make-node 'gate (entity-context-operator 'devices #:key (λ (e) (event-attr e 'device))) (list src)
+                          #:sink? #t))
+  (define acts (make-node 'acts activations-operator (list gate) #:sink? #t))
+  (run (make-program (list gate acts)) steps))
+
+(spec-test '(CX.entity CX.activation) "directory entities are activated before they send anything"
+  (define r (entity-run (list (directory-push 'devices '(("d1" . active) ("d2" . active)) #:at 0)
+                              (arrive 5 'in (dev "a" 5 "d1")))))
+  (check-equal? (for/list ([o (run-result-outputs r)] #:when (eq? (output-node o) 'acts))
+                  (list (output-at o) (event-attr (output-item o) 'key)))
+                '((0 "d1") (0 "d2")))
+  (check-equal? (map event-id (run-result-events r 'gate)) '("a")))
+
+(spec-test 'CX.entity "deprecated entities are ignored and counted; removed ones are activated afresh"
+  (define r (entity-run (list (directory-push 'devices '(("d1" . active) ("d2" . active)) #:at 0)
+                              (directory-push 'devices '(("d1" . inactive)) #:mode 'patch #:at 10)
+                              (arrive 11 'in (dev "a" 11 "d1"))
+                              (directory-push 'devices '(("d1" . inactive))) ; replace: d2 removed
+                              (arrive 20 'in (dev "b" 20 "d2")))))
+  (check-equal? (map event-id (run-result-events r 'gate)) '("b"))
+  (check-equal? (run-result-counter r 'gate 'ignored) 1)
+  (check-equal? (for/list ([o (run-result-outputs r)] #:when (eq? (output-node o) 'acts))
+                  (list (output-at o) (event-attr (output-item o) 'key)))
+                '((0 "d1") (0 "d2") (20 "d2"))))
+
+(spec-test '(CX.entity CX.activation) "lifecycle signals create and drop downstream state"
+  (define src (make-source 'in))
+  (define gate (make-node 'gate (entity-context-operator 'devices #:key (λ (e) (event-attr e 'device))) (list src)))
+  (define seen (make-node 'seen (make-operator 'seen #:lifecycle? #t #:key (λ (e) (event-attr e 'device))
+                                               #:init-key (λ (g k c) (ctx-now c)))
+                          (list gate) #:sink? #t))
+  (define r (run (make-program (list seen))
+                 (list (directory-push 'devices '(("d1" . active)) #:at 3)
+                       (directory-push 'devices '(("d1" . inactive)) #:at 9))))
+  ;; activated at 3, then dropped when deprecated
+  (check-equal? (hash-ref (cdr (hash-ref (run-result-states r) 'seen)) "d1" #f) #f)
+  (define r2 (run (make-program (list seen)) (list (directory-push 'devices '(("d1" . active)) #:at 3))))
+  (check-equal? (hash-ref (cdr (hash-ref (run-result-states r2) 'seen)) "d1") 3))
