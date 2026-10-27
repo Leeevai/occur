@@ -55,3 +55,10 @@
                 (hasheq 'flush 900))
   (check-compile-error "#lang occur\n(require occur/lib/reflex)\n(reflex-rule r #:condition (accumulate #:min-samples 3)\n #:reset-on-max-delay #f)\n"
                        #rx"#:reset-on-max-delay needs #:max-delay-s" 4))
+
+(spec-test '(CX.entity CX.activation) "the device directory is a CX.entity directory: watched, deprecated, deleted"
+  (check-equal? (found-in (string-append "(define-devices devices [\"d1\" watched] [\"d2\" deprecated] [\"d3\" deleted])\n"
+                                         "(define found (directory-entries devices-directory))"))
+                '(("d1" . active) ("d2" . inactive) ("d3" . removed)))
+  (check-equal? (found-in "(define found (directory-msg-entries (step:control-msg (push-devices 'devices '((\"d1\" . deleted)) #:mode 'patch))))")
+                (hash "d1" 'removed)))

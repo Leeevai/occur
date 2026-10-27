@@ -9,6 +9,7 @@
 (require (for-syntax racket/base syntax/parse))
 (provide DataArrival SensorData Trigger
          sensor-write
+         define-devices push-devices
          accumulate window silence cron
          reflex-rule)
 
@@ -27,6 +28,31 @@
 (define (sensor-write #:owner owner #:sensor sensor #:type type #:n n
                       #:first first-ts #:last [last-ts first-ts] #:newest [newest #f])
   (hasheq 'owner owner 'sensor sensor 'type type 'n n 'first_ts first-ts 'last_ts last-ts 'newest newest))
+
+;; The device directory (CX.entity). A device is watched (it can report, and
+;; is activated before it sends anything, CX.activation), deprecated (its
+;; state is dropped, and its arrivals are ignored and counted), or deleted
+;; (its state is dropped; if it reports again it is activated afresh).
+;; Its statuses are the directory's active, inactive, and removed.
+(define (device-status s)
+  (case s
+    [(watched) 'active]
+    [(deprecated) 'inactive]
+    [(deleted) 'removed]
+    [else (raise-arguments-error 'devices "unknown device status; expected watched, deprecated, or deleted"
+                                 "status" s)]))
+
+;; (define-devices name [device status] ...): the directory, in force from
+;; the start.
+(define-syntax-rule (define-devices name [device status] ...)
+  (directory name #:from (data (list (cons device (device-status 'status)) ...))))
+
+;; (push-devices 'name entries): a script step replacing the directory, or
+;; with #:mode 'patch changing the devices listed; entries are
+;; (device . status) pairs.
+(define (push-devices name entries #:mode [mode 'replace] #:at [t #f])
+  (directory-push name (for/list ([e (in-list entries)]) (cons (car e) (device-status (cdr e))))
+                  #:mode mode #:at t))
 
 ;; Normalization splits a DataArrival into one batch event per sensor
 ;; written (ES.batch): n samples over [first_ts, last_ts], a reference to the
