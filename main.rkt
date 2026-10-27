@@ -22,6 +22,10 @@
          "private/sketch.rkt"
          "private/join.rkt"
          "private/allen.rkt"
+         "private/pattern/ast.rkt"
+         "private/pattern/reference.rkt"
+         "private/pattern/families.rkt"
+         "private/pattern/operators.rkt"
          (only-in "private/scheduler.rkt"
                   cron cron? cron-text parse-cron cron-matches? cron-next cron-prev cron-ticks-between))
 (provide (all-from-out "private/time.rkt")
@@ -41,4 +45,8 @@
          (all-from-out "private/sketch.rkt")
          (all-from-out "private/join.rkt")
          (all-from-out "private/allen.rkt")
+         (all-from-out "private/pattern/ast.rkt")
+         (all-from-out "private/pattern/reference.rkt")
+         (all-from-out "private/pattern/families.rkt")
+         (all-from-out "private/pattern/operators.rkt")
          cron cron? cron-text parse-cron cron-matches? cron-next cron-prev cron-ticks-between)
