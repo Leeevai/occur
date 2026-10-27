@@ -370,7 +370,7 @@
               [a (if where-expr #`(where #,a #,where-expr) a)]
               [a (if (hash-ref opts '#:within #f) #`(within #,a #,(hash-ref opts '#:within)) a)])
          a))
-     (define engine (if (hash-ref opts '#:engine #f) (policy-value 'engine (hash-ref opts '#:engine)) 'reference))
+     (define engine (if (hash-ref opts '#:engine #f) (policy-value 'engine (hash-ref opts '#:engine)) 'incremental))
      (with-syntax ([rt (format-id #'name "~a-pattern" #'name)]
                    [ast full-ast]
                    [key key]

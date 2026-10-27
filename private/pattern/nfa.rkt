@@ -23,14 +23,18 @@
          "reference.rkt")
 
 ;; index: event-id -> global arrival index; pindex: event-id -> index within
-;; the key's partition; nodes: path -> node state; W: the watermark; now: the
-;; processing time; maxte: the newest end time seen (the horizon at the end).
-(struct engine (pattern activation index pindex pcount W now maxte nodes selection) #:transparent)
+;; the key's partition; nodes: path -> node state; W: the watermark; lastW:
+;; the newest finite watermark; now: the processing time; maxte: the newest
+;; end time seen. At the end of the stream, periodic ticks without a close
+;; run up to max(lastW, maxte), the evaluation horizon (decision 0011).
+(struct engine (pattern activation index pindex pcount W lastW now maxte nodes selection) #:transparent)
 
 (define (make-engine p #:activation [activation #f] #:selection [selection 'any])
   (define problem (pattern-problem p))
   (when problem (raise-arguments-error 'make-engine problem))
-  (engine p activation (hash) (hash) 0 -inf.0 -inf.0 -inf.0 (hash) selection))
+  (engine p activation (hash) (hash) 0 -inf.0 -inf.0 -inf.0 -inf.0 (hash) selection))
+
+(define (engine-horizon e) (time-max (engine-lastW e) (engine-maxte e)))
 
 ;; ---------------------------------------------------------------------------
 ;; Inputs: '(start), (list 'event e), (list 'advance)
@@ -45,8 +49,12 @@
                           [maxte (time-max (engine-maxte e) (event-te ev))]))
   (engine-step e2 (list 'event ev)))
 
-(define (engine-advance e W now)
-  (engine-step (struct-copy engine e [W (time-max W (engine-W e))] [now (time-max now (engine-now e))])
+;; last-finite: the newest finite watermark of the whole stream, which a
+;; keyed operator tracks across keys
+(define (engine-advance e W now #:last-finite [last-finite -inf.0])
+  (engine-step (struct-copy engine e [W (time-max W (engine-W e))] [now (time-max now (engine-now e))]
+                            [lastW (time-max last-finite
+                                             (if (< W +inf.0) (time-max W (engine-lastW e)) (engine-lastW e)))])
                '(advance)))
 
 ;; ---------------------------------------------------------------------------
@@ -61,7 +69,7 @@
   (define now (engine-now e0))
   ;; the horizon for periodic ticks: the watermark, but at the end of the
   ;; stream the newest end time seen (as in the oracle)
-  (define horizon (if (eqv? W +inf.0) (engine-maxte e0) W))
+  (define horizon (if (eqv? W +inf.0) (engine-horizon e0) W))
   (define selection (engine-selection e0))
   (define (get path) (hash-ref nodes path (λ () (node (hasheq) (hash)))))
   (define (store path tag [default '()]) (hash-ref (node-stores (get path)) tag default))
@@ -323,12 +331,15 @@
 ;; ---------------------------------------------------------------------------
 ;; The next moment the engine needs attention without new data: the
 ;; earliest pending decision, as an event-time deadline and as a
-;; processing-time deadline (hybrid absence).
+;; processing-time deadline (hybrid absence). Only undecided work is
+;; reported; at the final watermark every event-time decision has been made.
 
 (define (engine-deadlines e)
   (define evt '())
   (define proc '())
-  (define (add-evt! d) (set! evt (cons d evt)))
+  (define final? (eqv? (engine-W e) +inf.0))
+  (define ctx (oracle-ctx '() (engine-index e) (engine-activation e) +inf.0))
+  (define (add-evt! d) (unless final? (set! evt (cons d evt))))
   (let walk ([p (engine-pattern e)] [path '()])
     (define (st tag [default '()])
       (hash-ref (node-stores (hash-ref (engine-nodes e) path (λ () (node (hasheq) (hash))))) tag default))
@@ -341,14 +352,20 @@
       [(p:unless? p) (for ([m (st 'pending)]) (add-evt! (pmatch-te m)))]
       [(p:aperiodic? p)
        (if (p:aperiodic-cumulative? p)
-           (for ([c (st 'closes)]) (add-evt! (strictly-after (pmatch-ts c))))
+           (for ([o (st 'opens)] #:unless (hash-ref (st 'done (hash)) (pmatch-key o) #f))
+             (define c (first-closer-of ctx o (st 'closes)))
+             (when c (add-evt! (strictly-after (pmatch-ts c)))))
            (for ([x (st 'pending)]) (add-evt! (strictly-after (pmatch-te (cdr x))))))]
       [(p:periodic? p)
        (for ([o (st 'opens)])
          (define k (hash-ref (st 'emitted (hash)) (pmatch-key o) 0))
+         (define c (first-closer-of ctx o (st 'closes)))
          (unless (eq? k 'done)
-           (add-evt! (strictly-after (+ (pmatch-te o) (* (add1 k) (p:periodic-period p)))))))
-       (for ([c (st 'closes)]) (add-evt! (strictly-after (pmatch-ts c))))]
+           (cond
+             [(p:periodic-cumulative? p) (when c (add-evt! (strictly-after (pmatch-ts c))))]
+             [else
+              (define t (+ (pmatch-te o) (* (add1 k) (p:periodic-period p))))
+              (when (or (not c) (< t (pmatch-ts c))) (add-evt! (strictly-after t)))])))]
       [else (void)])
     (for ([c (children p)] [i (in-naturals)]) (walk c (cons i path))))
   (values (and (pair? evt) (car (sort evt (λ (a b) (< (deadline-time a) (deadline-time b))))))
@@ -361,8 +378,9 @@
   [engine-index (-> engine? hash?)]
   [engine-pindex (-> engine? hash?)]
   [make-engine (->* (pat?) (#:activation (or/c #f time?) #:selection symbol?) engine?)]
+  [engine-horizon (-> engine? time?)]
   [engine-start (-> engine? (values engine? (listof pmatch?)))]
   [engine-event (-> engine? event? exact-nonnegative-integer? (values engine? (listof pmatch?)))]
-  [engine-advance (-> engine? time? time? (values engine? (listof pmatch?)))]
+  [engine-advance (->* (engine? time? time?) (#:last-finite time?) (values engine? (listof pmatch?)))]
   [engine-deadlines (-> engine? (values (or/c #f deadline/c) (or/c #f time?)))]
   [register-selection-check! (-> symbol? procedure? void?)]))
