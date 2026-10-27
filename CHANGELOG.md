@@ -66,3 +66,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   strict event-time deadlines, per-node arrival sequence numbers, and
   differential property tests against the oracle; the default engine of
   `define-pattern`.
+- Pattern policies (M12): strict, partition, and skip-till-next-match
+  selection as per-step conditions checked by the engine and the oracle,
+  with the nesting property; recent, chronicle, continuous, and cumulative
+  consumption and retain; first, last, and maximal output; timed-out partial
+  matches (PT.flush); the five skip strategies; immediate and deferred
+  evaluation; edge, rate-limit, and coalesce stages; trace A's table of
+  §15.
