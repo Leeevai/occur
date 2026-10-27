@@ -229,3 +229,31 @@
                          (and (not (part-of? q m))
                               (< (pmatch-ts m) (pmatch-ts q)) (< (pmatch-te q) (pmatch-te m)))))
      m)))
+
+;; ===========================================================================
+;; PT.kleene-plus, PT.kleene-star, PT.repeat:
+;;   ⟦P+⟧ = ⋃_{k >= 1} ⟦P ; P ; … ; P⟧ (k copies; each copy's bindings are
+;;   appended to lists), ⟦P*⟧ = ⟦P+⟧ ∪ {∅}, ⟦P{n,m}⟧ with n <= k <= m.
+;; Each copy needs an event, so k is at most |H|. The empty match binds the
+;; repeated names to empty lists.
+
+(define (lift m)
+  (struct-copy pmatch m [bindings (for/hasheq ([(k v) (in-hash (pmatch-bindings m))])
+                                    (values k (if (list? v) v (list v))))]))
+
+(register!
+ p:repeat?
+ (λ (ctx p denote)
+   (define one (map lift (denote (p:repeat-body p))))
+   (define names (map car (pattern-bindings (p:repeat-body p) #t)))
+   (define eps (struct-copy pmatch empty-match [bindings (for/hasheq ([n names]) (values n '()))]))
+   (define lo (p:repeat-min p))
+   (define limit (min (p:repeat-max p) (length (oracle-ctx-history ctx))))
+   (let loop ([k 1] [level one] [acc (if (zero? lo) (list eps) '())])
+     (define acc2 (if (and (>= k lo) (<= k limit)) (append acc level) acc))
+     (if (or (>= k limit) (null? level))
+         acc2
+         (loop (add1 k)
+               (dedupe (for*/list ([a (in-list level)] [b (in-list one)] #:when (< (pmatch-te a) (pmatch-ts b)))
+                         (pmatch-union ctx a b #:pred (pred-of ctx a))))
+               acc2)))))

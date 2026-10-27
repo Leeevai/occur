@@ -82,3 +82,23 @@
   (check-equal? (ids (denote (span-absence (seq A B) V) H2)) '(("a1" "b1")))
   ;; Q's own events inside the match do not count against it
   (check-equal? (ids (denote (span-absence (seq A (prim 'V #:bind 'v) B) V) H2)) '(("a1" "v" "b2"))))
+
+(spec-test 'PT.kleene-plus "⟦B+⟧ is every time-ordered non-empty run, bound as a list"
+  (check-equal? (ids (denote (kleene+ B) H)) '(("b1") ("b1" "b2") ("b2")))
+  (define long (findf (λ (m) (= 2 (length (pmatch-events m)))) (denote (kleene+ B) H)))
+  (check-equal? (map event-id (hash-ref (pmatch-bindings long) 'b)) '("b1" "b2")))
+
+(spec-test 'PT.kleene-star "⟦B*⟧ adds the empty match, meaningful inside a sequence"
+  (check-equal? (ids (denote (kleene* B) H)) '(("b1") ("b1" "b2") ("b2") ()))
+  ;; A ; B* ; C includes A ; C, with b bound to the empty list
+  (define ms (denote (seq A (kleene* B) C) H))
+  (check-equal? (id-set ms) (set-of '("a1" "c1") '("a1" "b1" "c1") '("a1" "b1" "b2" "c1") '("a1" "b2" "c1")
+                                    '("a2" "c1") '("a2" "b2" "c1")))
+  (check-equal? (hash-ref (pmatch-bindings (findf (λ (m) (= 2 (length (pmatch-events m)))) ms)) 'b) '()))
+
+(spec-test 'PT.repeat "⟦P{n,m}⟧ bounds the number of repetitions"
+  (define Hb (for/list ([i 4]) (ev (format "b~a" i) 'B i)))
+  ;; runs of 2 or 3 of four ordered events: C(4,2) + C(4,3)
+  (check-equal? (sort (map length (map pmatch-events (denote (repeat B 2 3) Hb))) <) '(2 2 2 2 2 2 3 3 3 3))
+  (check-equal? (length (denote (repeat B 3) Hb)) 4)
+  (check-equal? (length (denote (repeat B 1 +inf.0) Hb)) 15))
