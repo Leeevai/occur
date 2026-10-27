@@ -113,7 +113,14 @@
   (define op (table-join-operator #:key key))
   (define row (rate "r1" 2 "a" 10))
   (define res (join-run op (list (arrive 2 'r row) (arrive 3 'r (retraction row)) (arrive 4 's (order "o1" 4 "a" 5)))))
-  (check-equal? (pairs res) '()))
+  (check-equal? (pairs res) '())
+  ;; and what was already joined with the row is retracted with it (DR.retract)
+  (define res2 (join-run op (list (arrive 2 'r row) (arrive 4 's (order "o1" 4 "a" 5)) (arrive 5 'r (retraction row)))))
+  (check-equal? (for/list ([o (run-result-outputs res2)])
+                  (define x (output-item o))
+                  (if (retraction? x) (cons '⊖ (map event-id (event-constituents (retraction-event x))))
+                      (map event-id (event-constituents x))))
+                '(("o1" "r1") (⊖ "o1" "r1"))))
 
 (spec-test 'JN.as-of "each s meets the version valid at t(s), even when it arrives late"
   (define op (as-of-join-operator #:key key))

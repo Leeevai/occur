@@ -389,16 +389,17 @@
         (fire-event-timers! r name)])]
     [(retraction e)
      (set-runner-retracted! r (hash-update (runner-retracted r) name (λ (ids) (hash-set ids (event-id e) #t)) (hash)))
-     (cond
-       [(operator-on-retract op)
-        (define key (if (operator-key op) ((operator-key op) e) #f))
-        (key-callback! r name key (λ (g s c) ((operator-on-retract op) g s e c))
-                       #:port port #:create? #f)]
-       [else
-        (define idx (hash-ref (runner-prov r) name (hash)))
-        (define outs (remove-duplicates (reverse (hash-ref idx (event-id e) '())) eq?))
-        (set-runner-prov! r (hash-set (runner-prov r) name (hash-remove idx (event-id e))))
-        (propagate! r name #f (for/list ([o (in-list outs)]) (cons 0 (retraction o))))])]
+     ;; the operator updates its state (a table deletes the row, a window
+     ;; forgets the event), and what the node already derived from e is
+     ;; retracted (DR.retract)
+     (when (operator-on-retract op)
+       (define key (if (operator-key op) ((operator-key op) e) #f))
+       (key-callback! r name key (λ (g s c) ((operator-on-retract op) g s e c))
+                      #:port port #:create? #f))
+     (define idx (hash-ref (runner-prov r) name (hash)))
+     (define outs (remove-duplicates (reverse (hash-ref idx (event-id e) '())) eq?))
+     (set-runner-prov! r (hash-set (runner-prov r) name (hash-remove idx (event-id e))))
+     (propagate! r name #f (for/list ([o (in-list outs)]) (cons 0 (retraction o))))]
     [(signal kind key _ _)
      (define st (hash-ref (runner-states r) name))
      (cond
